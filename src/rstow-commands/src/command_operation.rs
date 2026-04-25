@@ -519,7 +519,7 @@ impl CommandOperation<DirectoryReader> for CommandOperationImpl {
     }
 
     fn is_symlink(&self, target: &Path) -> bool {
-        fs::metadata(target).is_ok_and(|meta| meta.is_symlink())
+        fs::symlink_metadata(target).is_ok_and(|meta| meta.is_symlink())
     }
 
     fn read_link(&self, target: &Path) -> Result<PathBuf, CommandError> {
