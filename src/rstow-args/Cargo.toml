@@ -1,0 +1,21 @@
+[package]
+name = "rstow-args"
+version.workspace = true
+authors.workspace = true
+readme.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+description.workspace = true
+
+[dependencies.rstow-config]
+path = "../rstow-config"
+
+[dependencies.rstow-commands]
+path = "../rstow-commands"
+
+[dependencies]
+clap = { version = "4.6.1", features = ["color", "derive", "error-context", "help", "suggestions", "unicode", "wrap_help", "usage"] }
+thiserror = { version = "2.0.18" }
+tracing = { version = "0.1.44" }
+tracing-appender = { version = "0.2.5" }

@@ -1,0 +1,18 @@
+[package]
+name = "rstow-config"
+version.workspace = true
+authors.workspace = true
+readme.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+description.workspace = true
+
+[dependencies]
+serde = { version = "1.0.228", features = ["derive"] }
+supports-color = { version = "3.0.2" }
+thiserror = { version = "2.0.18" }
+toml = { version = "1.1.2" }
+tracing = { version = "0.1.44" }
+tracing-appender = { version = "0.2.5" }
+tracing-subscriber = { version = "0.3.23" }

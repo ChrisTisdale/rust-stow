@@ -1,0 +1,75 @@
+name: build-rust
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - release/*
+  pull_request:
+    branches:
+      - main
+      - release/*
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: true
+      matrix:
+        target: [ release, debug ]
+        os: [ ubuntu-latest, windows-latest ]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Build debug
+        if: ${{ matrix.target == 'debug' }}
+        run: cargo build --all-features --all-targets
+      - name: Test
+        if: ${{ matrix.target == 'debug' }}
+        run: cargo test
+      - name: Build Release
+        if: ${{ matrix.target == 'release' }}
+        run: cargo build --release --all-features --all-targets
+
+  build-checks:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+          components: "clippy, rustfmt"
+      - name: Cargo fmt
+        run: cargo fmt --all -- --check
+      - name: Cargo clippy
+        run: cargo clippy --all -- -W clippy::all -W clippy::pedantic -W clippy::nursery -D warnings
+
+  build-docs:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Docs Build
+        run: cargo doc

@@ -1,0 +1,14 @@
+[package]
+name = "rstow-commands"
+version.workspace = true
+authors.workspace = true
+readme.workspace = true
+repository.workspace = true
+license.workspace = true
+edition.workspace = true
+description.workspace = true
+
+[dependencies]
+grep = { version = "0.4.1", features = ["pcre2"] }
+thiserror = { version = "2.0.18" }
+tracing = { version = "0.1.44" }
