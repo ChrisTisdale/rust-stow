@@ -19,6 +19,7 @@
 use thiserror::Error;
 
 #[derive(Error, Debug)]
+#[non_exhaustive]
 pub enum CommandBuildError {
     #[error("Missing target directory")]
     MissingTargetDirectory,

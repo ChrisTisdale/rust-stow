@@ -437,7 +437,7 @@ fn missing_target_build_error_test() {
     let err = result.err().unwrap();
     match err {
         CommandBuildError::MissingTargetDirectory => {}
-        e @ CommandBuildError::MissingStowDirectory => panic!("Expected MissingTargetDirectory error, got {e:?}"),
+        e => panic!("Expected MissingTargetDirectory error, got {e:?}"),
     }
 }
 
@@ -452,7 +452,7 @@ fn missing_stow_dir_build_error_test() {
     let err = result.err().unwrap();
     match err {
         CommandBuildError::MissingStowDirectory => {}
-        e @ CommandBuildError::MissingTargetDirectory => panic!("Expected MissingStowDirectory error, got {e:?}"),
+        e => panic!("Expected MissingStowDirectory error, got {e:?}"),
     }
 }
 
