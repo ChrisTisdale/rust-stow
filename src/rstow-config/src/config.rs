@@ -100,3 +100,224 @@ impl Config {
         Ok(config)
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::logging_config::{LoggingLevel, RotationType};
+    use std::path::PathBuf;
+
+    #[test]
+    fn toml_version_1_deserialization() {
+        let config_content = r#"
+        version = 1
+
+        [ignored]
+        file = "ignored_files.txt"
+        comment = 'c'
+
+        [logging]
+        level = "info"
+        file = "temp.log"
+        logging_path = "log_dir"
+        rotation = "daily"
+        max_log_files = 10
+        color_support = true
+        "#;
+
+        let config: Config = toml::from_str(config_content).expect("Failed to parse TOML");
+        assert_eq!(config.ignored.file, Path::new("ignored_files.txt"));
+        assert_eq!(config.ignored.comment, 'c');
+        assert_eq!(config.version, ConfigFileVersion::V1);
+        assert_eq!(config.logging.file, Some(PathBuf::from("temp.log")));
+        assert_eq!(config.logging.logging_path, Some(PathBuf::from("log_dir")));
+        assert_eq!(config.logging.rotation, Some(RotationType::Daily));
+        assert_eq!(config.logging.max_log_files, Some(10));
+        assert_eq!(config.logging.color_support, Some(true));
+        assert_eq!(config.logging.level, Some(LoggingLevel::Info));
+    }
+
+    #[test]
+    fn toml_version_1_deserialization_string_version() {
+        let allowed_versions = vec!["1", "v1", "V1"];
+        for version in allowed_versions {
+            let config_content = format!(
+                r#"
+            version = "{version}"
+            "#
+            );
+
+            let config: Config = toml::from_str(&config_content).expect("Failed to parse TOML");
+            assert_eq!(config.version, ConfigFileVersion::V1);
+        }
+    }
+
+    #[test]
+    fn toml_version_1_everything_is_optional() {
+        let config_content = "
+        version = 1
+        ";
+
+        let default_config = Config::default();
+        let config: Config = toml::from_str(config_content).expect("Failed to parse TOML");
+        assert_eq!(config.version, ConfigFileVersion::V1);
+        assert_eq!(
+            config.logging.logging_path,
+            default_config.logging.logging_path
+        );
+        assert_eq!(config.logging.rotation, default_config.logging.rotation);
+        assert_eq!(
+            config.logging.max_log_files,
+            default_config.logging.max_log_files
+        );
+        assert_eq!(
+            config.logging.color_support,
+            default_config.logging.color_support
+        );
+        assert_eq!(config.logging.level, default_config.logging.level);
+        assert_eq!(config.ignored.file, default_config.ignored.file);
+        assert_eq!(config.ignored.comment, default_config.ignored.comment);
+    }
+
+    #[test]
+    fn toml_version_1_ignores_logging_level_case() {
+        let allowed_levels = vec![
+            LoggingLevel::Off,
+            LoggingLevel::Trace,
+            LoggingLevel::Debug,
+            LoggingLevel::Info,
+            LoggingLevel::Warn,
+            LoggingLevel::Error,
+        ];
+
+        for level in allowed_levels {
+            let config_content = format!(
+                r#"
+            version = 1
+
+            [logging]
+            level = "{level}"
+            "#
+            );
+
+            let config: Config = toml::from_str(config_content.as_str()).expect("Failed to parse TOML");
+            assert_eq!(config.logging.level, Some(level));
+
+            let config_content = format!(
+                r#"
+            version = 1
+
+            [logging]
+            level = "{}"
+            "#,
+                level.to_string().to_uppercase()
+            );
+
+            let config: Config = toml::from_str(config_content.as_str()).expect("Failed to parse TOML");
+            assert_eq!(config.logging.level, Some(level));
+
+            let config_content = format!(
+                r#"
+            version = 1
+
+            [logging]
+            level = "{}"
+            "#,
+                level.to_string().to_lowercase()
+            );
+
+            let config: Config = toml::from_str(config_content.as_str()).expect("Failed to parse TOML");
+            assert_eq!(config.logging.level, Some(level));
+        }
+    }
+
+    #[test]
+    fn toml_version_1_logging_level_can_use_numeric_value() {
+        let allowed_levels = vec![
+            LoggingLevel::Off,
+            LoggingLevel::Trace,
+            LoggingLevel::Debug,
+            LoggingLevel::Info,
+            LoggingLevel::Warn,
+            LoggingLevel::Error,
+        ];
+
+        for level in allowed_levels {
+            let config_content = format!(
+                r"
+            version = 1
+
+            [logging]
+            level = {}
+            ",
+                level as i64
+            );
+
+            let config: Config = toml::from_str(config_content.as_str()).expect("Failed to parse TOML");
+            assert_eq!(config.logging.level, Some(level));
+        }
+    }
+
+    #[test]
+    fn toml_version_1_ignores_rotation_case() {
+        let rotations_types = vec![RotationType::Hourly, RotationType::Daily];
+        for rotation in rotations_types {
+            let config_content = format!(
+                r#"
+            version = 1
+
+            [logging]
+            rotation = "{rotation}"
+            "#
+            );
+
+            let config: Config = toml::from_str(config_content.as_str()).expect("Failed to parse TOML");
+            assert_eq!(config.logging.rotation, Some(rotation));
+
+            let config_content = format!(
+                r#"
+            version = 1
+
+            [logging]
+            rotation = "{}"
+            "#,
+                rotation.to_string().to_uppercase()
+            );
+
+            let config: Config = toml::from_str(config_content.as_str()).expect("Failed to parse TOML");
+            assert_eq!(config.logging.rotation, Some(rotation));
+
+            let config_content = format!(
+                r#"
+            version = 1
+
+            [logging]
+            rotation = "{}"
+            "#,
+                rotation.to_string().to_lowercase()
+            );
+
+            let config: Config = toml::from_str(config_content.as_str()).expect("Failed to parse TOML");
+            assert_eq!(config.logging.rotation, Some(rotation));
+        }
+    }
+
+    #[test]
+    fn toml_version_1_rotation_can_use_numeric_value() {
+        let rotations_types = vec![RotationType::Hourly, RotationType::Daily];
+        for rotation in rotations_types {
+            let config_content = format!(
+                r"
+            version = 1
+
+            [logging]
+            rotation = {}
+            ",
+                rotation as i64
+            );
+
+            let config: Config = toml::from_str(config_content.as_str()).expect("Failed to parse TOML");
+            assert_eq!(config.logging.rotation, Some(rotation));
+        }
+    }
+}

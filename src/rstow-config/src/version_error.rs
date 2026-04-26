@@ -16,29 +16,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-mod app_configuration;
-mod app_directories;
-mod config;
-mod config_error;
-mod config_file_version;
-mod ignored;
-mod logging_config;
-mod logging_error;
+use thiserror::Error;
 
-mod level_error;
-pub mod path_resolver;
-mod rotation_error;
-mod version_error;
-
-pub use app_configuration::{AppConfiguration, DEFAULT_CONFIG_FILE};
-pub use config_error::ConfigError;
-pub use config_file_version::ConfigFileVersion;
-pub use level_error::LevelError;
-pub use logging_error::LoggingError;
-pub use rotation_error::RotationError;
-pub use version_error::VersionError;
-
-pub(crate) use app_directories::AppDirectories;
-pub(crate) use config::Config;
-pub(crate) use ignored::Ignored;
-pub(crate) use logging_config::LoggingConfig;
+#[derive(Debug, Error)]
+#[non_exhaustive]
+pub enum VersionError {
+    #[error("Unsupported config file version: {0}")]
+    UnsupportedVersion(i64),
+    #[error("Unsupported config file version: {0}")]
+    UnsupportedVersionString(String),
+}

@@ -16,20 +16,104 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use serde::{Deserialize, Serialize};
+use crate::LevelError;
+use crate::rotation_error::RotationError;
+use serde::de::Visitor;
+use serde::{Deserialize, Deserializer, Serialize, de};
 use std::fmt::Display;
 use std::path::PathBuf;
+use std::str::FromStr;
 use tracing::level_filters::LevelFilter;
 use tracing_appender::rolling::Rotation;
 
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[repr(i64)]
 pub enum LoggingLevel {
-    Off,
+    Off = 0,
     Trace,
     Debug,
     Info,
     Warn,
     Error,
+}
+
+impl FromStr for LoggingLevel {
+    type Err = LevelError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "off" | "Off" | "OFF" => Ok(Self::Off),
+            "trace" | "Trace" | "TRACE" => Ok(Self::Trace),
+            "debug" | "Debug" | "DEBUG" => Ok(Self::Debug),
+            "info" | "Info" | "INFO" => Ok(Self::Info),
+            "warn" | "Warn" | "WARN" => Ok(Self::Warn),
+            "error" | "Error" | "ERROR" => Ok(Self::Error),
+            _ => Err(LevelError::InvalidLevelString(s.to_string())),
+        }
+    }
+}
+
+impl TryFrom<i64> for LoggingLevel {
+    type Error = LevelError;
+
+    fn try_from(value: i64) -> Result<Self, LevelError> {
+        match value {
+            0 => Ok(Self::Off),
+            1 => Ok(Self::Trace),
+            2 => Ok(Self::Debug),
+            3 => Ok(Self::Info),
+            4 => Ok(Self::Warn),
+            5 => Ok(Self::Error),
+            _ => Err(LevelError::InvalidLevel(value)),
+        }
+    }
+}
+
+impl Serialize for LoggingLevel {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(match self {
+            Self::Off => "off",
+            Self::Trace => "trace",
+            Self::Debug => "debug",
+            Self::Info => "info",
+            Self::Warn => "warn",
+            Self::Error => "error",
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for LoggingLevel {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct LoggingLevelVisitor;
+
+        impl Visitor<'_> for LoggingLevelVisitor {
+            type Value = LoggingLevel;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("off or trace or debug or info or warn or error")
+            }
+
+            fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
+                v.try_into().map_err(de::Error::custom)
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                v.parse().map_err(de::Error::custom)
+            }
+
+            fn visit_string<E: de::Error>(self, v: String) -> Result<Self::Value, E> {
+                self.visit_str(&v)
+            }
+        }
+
+        deserializer.deserialize_any(LoggingLevelVisitor)
+    }
 }
 
 impl Display for LoggingLevel {
@@ -71,9 +155,10 @@ impl From<LoggingLevel> for LevelFilter {
     }
 }
 
-#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd, Serialize, Deserialize)]
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq, Hash, Ord, PartialOrd)]
+#[repr(i64)]
 pub enum RotationType {
-    Hourly,
+    Hourly = 1,
     #[default]
     Daily,
 }
@@ -84,6 +169,73 @@ impl From<RotationType> for Rotation {
             RotationType::Hourly => Self::HOURLY,
             RotationType::Daily => Self::DAILY,
         }
+    }
+}
+
+impl FromStr for RotationType {
+    type Err = RotationError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "hourly" | "Hourly" | "HOURLY" => Ok(Self::Hourly),
+            "daily" | "Daily" | "DAILY" => Ok(Self::Daily),
+            _ => Err(RotationError::InvalidRotationTypeString(s.to_string())),
+        }
+    }
+}
+
+impl TryFrom<i64> for RotationType {
+    type Error = RotationError;
+
+    fn try_from(value: i64) -> Result<Self, Self::Error> {
+        match value {
+            1 => Ok(Self::Hourly),
+            2 => Ok(Self::Daily),
+            _ => Err(RotationError::InvalidRotationType(value)),
+        }
+    }
+}
+
+impl Serialize for RotationType {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(match self {
+            Self::Hourly => "hourly",
+            Self::Daily => "daily",
+        })
+    }
+}
+
+impl<'de> Deserialize<'de> for RotationType {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        struct RotationTypeVisitor;
+
+        impl Visitor<'_> for RotationTypeVisitor {
+            type Value = RotationType;
+
+            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+                formatter.write_str("hourly or daily")
+            }
+
+            fn visit_i64<E: de::Error>(self, v: i64) -> Result<Self::Value, E> {
+                v.try_into().map_err(de::Error::custom)
+            }
+
+            fn visit_str<E: de::Error>(self, v: &str) -> Result<Self::Value, E> {
+                v.parse().map_err(de::Error::custom)
+            }
+
+            fn visit_string<E: de::Error>(self, v: String) -> Result<Self::Value, E> {
+                self.visit_str(&v)
+            }
+        }
+
+        deserializer.deserialize_string(RotationTypeVisitor)
     }
 }
 
