@@ -19,8 +19,7 @@
 use crate::{CliArgs, CliError};
 use clap::builder::Styles;
 use clap::error::ErrorKind;
-use clap::{Args, CommandFactory, ValueHint};
-use clap::{Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, ValueHint};
 use rstow_commands::{CommandBuilder, CommandOperationImpl};
 use rstow_config::{AppConfiguration, DEFAULT_CONFIG_FILE, path_resolver};
 use std::fmt::Display;
@@ -31,35 +30,10 @@ use tracing::level_filters::LevelFilter;
 const STYLES: Styles = Styles::styled();
 const APP_NAME: &str = "rstow";
 
-#[derive(Subcommand, Clone, Copy, PartialEq, Ord, PartialOrd, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Ord, PartialOrd, Eq, Hash)]
 enum ProcessCommands {
-    #[command(
-        about = "Stow packages into the target directory, creating symbolic links for each file. This is the default operation if no command is specified.",
-        short_flag = 's',
-        long_flag = "stow",
-        flatten = true,
-        flatten_help = true,
-        help_expected = false
-    )]
     Stow,
-    #[command(
-        about = "Remove symbolic links from the target directory that belong to the specified packages. This is useful for cleaning up after a package is no longer needed.",
-        short_flag = 'D',
-        long_flag = "delete",
-        alias = "unstow",
-        flatten = true,
-        flatten_help = true,
-        help_expected = false
-    )]
     Delete,
-    #[command(
-        about = "Restow packages by first removing their existing symbolic links and then re-stowing them. This is equivalent to running 'delete' followed by 'stow', and is useful for updating links after package contents change.",
-        short_flag = 'R',
-        long_flag = "restow",
-        flatten = true,
-        flatten_help = true,
-        help_expected = false
-    )]
     Restow,
 }
 
@@ -69,6 +43,48 @@ impl Display for ProcessCommands {
             Self::Stow => f.write_str("Stow"),
             Self::Delete => f.write_str("Delete"),
             Self::Restow => f.write_str("Restow"),
+        }
+    }
+}
+
+#[derive(Args)]
+struct ProcessCommandArgs {
+    #[arg(
+        short = 's',
+        long = "stow",
+        help = "Stow packages into the target directory, creating symbolic links for each file. This is the default operation if no command is specified.",
+        conflicts_with = "delete",
+        conflicts_with = "restow"
+    )]
+    stow: bool,
+    #[arg(
+        short = 'D',
+        long = "delete",
+        alias = "unstow",
+        visible_alias = "unstow",
+        help = "Remove symbolic links from the target directory that belong to the specified packages. This is useful for cleaning up after a package is no longer needed.",
+        conflicts_with = "stow",
+        conflicts_with = "restow"
+    )]
+    delete: bool,
+    #[arg(
+        short = 'R',
+        long = "restow",
+        help = "Restow packages by first removing their existing symbolic links and then re-stowing them. This is equivalent to running 'delete' followed by 'stow', and is useful for updating links after package contents change.",
+        conflicts_with = "stow",
+        conflicts_with = "delete"
+    )]
+    restow: bool,
+}
+
+impl From<ProcessCommandArgs> for ProcessCommands {
+    fn from(args: ProcessCommandArgs) -> Self {
+        if args.delete {
+            Self::Delete
+        } else if args.restow {
+            Self::Restow
+        } else {
+            Self::Stow
         }
     }
 }
@@ -165,9 +181,9 @@ struct GlobalArgs {
 #[clap(rename_all = "snake_case")]
 pub struct CommandLineProcessor {
     #[clap(flatten)]
+    process_command: ProcessCommandArgs,
+    #[clap(flatten)]
     global_args: GlobalArgs,
-    #[clap(subcommand)]
-    command: Option<ProcessCommands>,
 }
 
 impl CommandLineProcessor {
@@ -214,6 +230,7 @@ impl CommandLineProcessor {
     pub fn get_cli_args() -> Result<CliArgs<CommandOperationImpl>, CliError> {
         let cli_args = Self::try_parse()?;
         let global = cli_args.global_args;
+        let process_command = cli_args.process_command.into();
         let directory = global.directory.map_or_else(
             || Err(Self::command().error(ErrorKind::MissingRequiredArgument, "DIRECTORY is required."))?,
             |d| path_resolver::resolve_path(&d).map_err(CliError::from),
@@ -251,12 +268,14 @@ impl CommandLineProcessor {
             builder.command()
         };
 
-        let command = match cli_args.command.unwrap_or(ProcessCommands::Stow) {
+        let overrides = global.overrides.into_iter().collect();
+        let command = match process_command {
             ProcessCommands::Stow => builder
                 .stow()
                 .with_ignored(app_config.ignored)
                 .with_no_folding(global.no_folding)
                 .with_dot_file_prefix(global.dotfiles)
+                .with_overrides(overrides)
                 .build(),
             ProcessCommands::Delete => builder.unstow().build(),
             ProcessCommands::Restow => builder
@@ -264,6 +283,7 @@ impl CommandLineProcessor {
                 .with_ignored(app_config.ignored)
                 .with_no_folding(global.no_folding)
                 .with_dot_file_prefix(global.dotfiles)
+                .with_overrides(overrides)
                 .build(),
         }?;
 
