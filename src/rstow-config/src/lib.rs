@@ -26,6 +26,7 @@ mod logging_config;
 mod logging_error;
 
 mod level_error;
+mod overrides;
 pub mod path_resolver;
 mod rotation_error;
 mod version_error;
@@ -42,3 +43,4 @@ pub(crate) use app_directories::AppDirectories;
 pub(crate) use config::Config;
 pub(crate) use ignored::Ignored;
 pub(crate) use logging_config::LoggingConfig;
+pub(crate) use overrides::Overrides;

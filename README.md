@@ -91,6 +91,10 @@ version = 1
 file = ".rstow-ignore"
 comment = "#"
 
+#[overrides]
+#file = ".rstow-override"
+#comment = "#"
+
 [logging]
 level = "Info"
 # logging_path = "path/to/logs"

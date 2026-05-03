@@ -248,7 +248,14 @@ impl CommandLineProcessor {
             None
         };
 
-        let app_config = AppConfiguration::load_configuration(config_file.map(PathBuf::as_path), &directory, ignored)?;
+        let overrides = global.overrides.into_iter().collect();
+        let app_config = AppConfiguration::load_configuration(
+            config_file.map(PathBuf::as_path),
+            &directory,
+            ignored,
+            overrides,
+        )?;
+
         let guard = app_config.setup_logger(global.log_level)?;
 
         let target = global
@@ -268,14 +275,13 @@ impl CommandLineProcessor {
             builder.command()
         };
 
-        let overrides = global.overrides.into_iter().collect();
         let command = match process_command {
             ProcessCommands::Stow => builder
                 .stow()
                 .with_ignored(app_config.ignored)
                 .with_no_folding(global.no_folding)
                 .with_dot_file_prefix(global.dotfiles)
-                .with_overrides(overrides)
+                .with_overrides(app_config.overrides)
                 .build(),
             ProcessCommands::Delete => builder.unstow().build(),
             ProcessCommands::Restow => builder
@@ -283,7 +289,7 @@ impl CommandLineProcessor {
                 .with_ignored(app_config.ignored)
                 .with_no_folding(global.no_folding)
                 .with_dot_file_prefix(global.dotfiles)
-                .with_overrides(overrides)
+                .with_overrides(app_config.overrides)
                 .build(),
         }?;
 

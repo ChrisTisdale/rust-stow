@@ -17,7 +17,8 @@
  */
 
 use crate::{
-    AppDirectories, ConfigError, ConfigFileVersion, DEFAULT_CONFIG_FILE, Ignored, LoggingConfig, path_resolver,
+    AppDirectories, ConfigError, ConfigFileVersion, DEFAULT_CONFIG_FILE, Ignored, LoggingConfig, Overrides,
+    path_resolver,
 };
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
@@ -32,14 +33,16 @@ pub struct Config {
     pub ignored: Ignored,
     #[serde(default)]
     pub logging: LoggingConfig,
+    #[serde(default)]
+    pub overrides: Overrides,
 }
 
 impl Display for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Config {{ version: {}, ignored: {}, logging: {} }}",
-            self.version, self.ignored, self.logging
+            "Config {{ version: {}, ignored: {}, logging: {}, overrides: {} }}",
+            self.version, self.ignored, self.logging, self.overrides
         )
     }
 }
@@ -50,6 +53,7 @@ impl Default for Config {
             version: ConfigFileVersion::V1,
             ignored: Ignored::default(),
             logging: LoggingConfig::default(),
+            overrides: Overrides::default(),
         }
     }
 }
@@ -95,6 +99,11 @@ impl Config {
         {
             let parent_dir = file_path.parent().unwrap_or(home_dir.as_path());
             config.logging.logging_path = Some(parent_dir.join(path));
+        }
+
+        if let Some(file) = config.overrides.file.to_str() {
+            let path = Path::new(file);
+            config.overrides.file = path_resolver::resolve_path(path)?;
         }
 
         Ok(config)

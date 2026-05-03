@@ -21,6 +21,12 @@ use std::path::PathBuf;
 
 const APP_NAME: &str = "rstow";
 
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+const CONFIG_ENV_VAR: &str = "XDG_CONFIG_HOME";
+
+#[cfg(target_os = "windows")]
+const CONFIG_ENV_VAR: &str = "APPDATA";
+
 #[cfg(target_os = "macos")]
 const DEFAULT_CONFIG_PATH: &str = "~/Library/Application Support/";
 
@@ -29,6 +35,12 @@ const DEFAULT_CONFIG_PATH: &str = "~/.config/";
 
 #[cfg(target_os = "windows")]
 const DEFAULT_CONFIG_PATH: &str = "~\\AppData\\Roaming";
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+const LOG_PATH_ENV_VAR: &str = "XDG_DATA_HOME";
+
+#[cfg(target_os = "windows")]
+const LOG_PATH_ENV_VAR: &str = "LOCALAPPDATA";
 
 #[cfg(target_os = "macos")]
 const DEFAULT_LOG_PATH: &str = "~/Library/Application Support/";
@@ -54,31 +66,15 @@ impl AppDirectories {
         }
     }
 
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn get_config_directory() -> PathBuf {
-        env::var_os("XDG_CONFIG_HOME")
+        env::var_os(CONFIG_ENV_VAR)
             .map_or_else(|| PathBuf::from(DEFAULT_CONFIG_PATH), |s| PathBuf::from(&s))
             .join(APP_NAME)
     }
 
-    #[cfg(target_os = "windows")]
-    fn get_config_directory() -> PathBuf {
-        env::var_os("APPDATA")
-            .map_or_else(|| PathBuf::from(DEFAULT_CONFIG_PATH), |v| PathBuf::from(&v))
-            .join(APP_NAME)
-    }
-
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
     fn get_log_directory() -> PathBuf {
-        env::var_os("XDG_DATA_HOME")
+        env::var_os(LOG_PATH_ENV_VAR)
             .map_or_else(|| PathBuf::from(DEFAULT_LOG_PATH), |s| PathBuf::from(&s))
-            .join(APP_NAME)
-    }
-
-    #[cfg(target_os = "windows")]
-    fn get_log_directory() -> PathBuf {
-        env::var_os("LOCALAPPDATA")
-            .map_or_else(|| PathBuf::from(DEFAULT_LOG_PATH), |v| PathBuf::from(&v))
             .join(APP_NAME)
     }
 }

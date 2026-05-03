@@ -58,6 +58,7 @@ const DEFAULT_IGNORE: &[&str] = &[
 pub struct AppConfiguration {
     config: Config,
     pub ignored: HashSet<String>,
+    pub overrides: HashSet<String>,
 }
 
 impl Display for AppConfiguration {
@@ -93,7 +94,7 @@ impl AppConfiguration {
     ///
     /// fn main() -> Result<(), Box<dyn Error>> {
     ///     use std::env;
-    /// let configuration = AppConfiguration::load_configuration(None, &env::current_dir()?, HashSet::new())?;
+    /// let configuration = AppConfiguration::load_configuration(None, &env::current_dir()?, HashSet::new(), HashSet::new())?;
     ///     Ok(())
     /// }
     /// ```
@@ -101,6 +102,7 @@ impl AppConfiguration {
         config_file: Option<&Path>,
         search_path: &Path,
         mut ignored: HashSet<String>,
+        mut overrides: HashSet<String>,
     ) -> Result<Self, ConfigError> {
         let mut config = Config::from_file(config_file)?;
         if config.ignored.file.is_relative() {
@@ -114,7 +116,12 @@ impl AppConfiguration {
         }
 
         ignored.extend(Self::read_ignore_file(&config, config_file)?);
-        Ok(Self { config, ignored })
+        overrides.extend(Self::read_override_file(&config)?);
+        Ok(Self {
+            config,
+            ignored,
+            overrides,
+        })
     }
 
     /// Setting up logging for the application using the provided configuration
@@ -138,7 +145,7 @@ impl AppConfiguration {
     ///
     /// fn main() -> Result<(), Box<dyn Error>> {
     ///     use std::env;
-    /// let configuration = AppConfiguration::load_configuration(None, &env::current_dir()?, HashSet::new())?;
+    /// let configuration = AppConfiguration::load_configuration(None, &env::current_dir()?, HashSet::new(), HashSet::new())?;
     ///     configuration.setup_logger(None)?;
     ///     Ok(())
     /// }
@@ -182,43 +189,64 @@ impl AppConfiguration {
             )
     }
 
-    fn build_ignore_file_pattern(path: Option<&Path>) -> Option<String> {
+    fn build_file_pattern(path: Option<&Path>) -> Option<String> {
         path.and_then(|p| p.file_name())
             .and_then(|p| p.to_str())
             .map(|p| format!("^/{p}"))
     }
 
     fn read_ignore_file(config: &Config, config_file: Option<&Path>) -> Result<HashSet<String>, ConfigError> {
-        let mut ignored_files = HashSet::new();
-        if let Some(file_string) = Self::build_ignore_file_pattern(Some(config.ignored.file.as_path())) {
-            ignored_files.insert(file_string);
+        let mut files = HashSet::new();
+        if let Some(file_string) = Self::build_file_pattern(Some(config.ignored.file.as_path())) {
+            files.insert(file_string);
         }
 
-        if let Some(file_string) = Self::build_ignore_file_pattern(config_file) {
-            ignored_files.insert(file_string);
+        if let Some(file_string) = Self::build_file_pattern(config_file) {
+            files.insert(file_string);
         }
 
-        if !config.ignored.file.exists() {
-            ignored_files.extend(DEFAULT_IGNORE.iter().map(ToString::to_string));
-            return Ok(ignored_files);
+        if !fs::exists(config.ignored.file.as_path()).unwrap_or(false) {
+            files.extend(DEFAULT_IGNORE.iter().map(ToString::to_string));
+            return Ok(files);
         }
 
-        let content = fs::read_to_string(config.ignored.file.as_path())?;
+        Self::read_ignore_or_override_file(config.ignored.file.as_path(), config.ignored.comment, files)
+    }
+
+    fn read_override_file(config: &Config) -> Result<HashSet<String>, ConfigError> {
+        let files = HashSet::new();
+        if !fs::exists(config.overrides.file.as_path()).unwrap_or(false) {
+            return Ok(files);
+        }
+
+        Self::read_ignore_or_override_file(
+            config.overrides.file.as_path(),
+            config.overrides.comment,
+            files,
+        )
+    }
+
+    fn read_ignore_or_override_file(
+        file: &Path,
+        comment: char,
+        mut files: HashSet<String>,
+    ) -> Result<HashSet<String>, ConfigError> {
+        let content = fs::read_to_string(file)?;
         let items = content
             .lines()
-            .filter(|line| !line.is_empty() && !line.starts_with(config.ignored.comment))
-            .map(|line| Self::parse_line(config, line))
+            .filter(|line| !line.is_empty() && !line.starts_with(comment))
+            .map(|line| Self::parse_line(comment, line))
             .filter(|line| !line.is_empty())
             .map(ToString::to_string);
 
-        ignored_files.extend(items);
-        Ok(ignored_files)
+        files.extend(items);
+        Ok(files)
     }
 
-    fn parse_line<'a>(config: &Config, line: &'a str) -> &'a str {
+    fn parse_line(comment: char, line: &str) -> &str {
         let mut has_escaped_backslash = false;
         for (i, c) in line.char_indices() {
-            if !has_escaped_backslash && c == config.ignored.comment {
+            if !has_escaped_backslash && c == comment {
                 return line[..i].trim();
             }
 
