@@ -130,7 +130,7 @@ impl AppConfiguration {
     ///
     /// * `override_level`: The level to override the configuration level with
     ///
-    /// returns: Result<Option<WorkerGuard>, `LoggingError`>
+    /// returns: `Result<Option<WorkerGuard>`, `LoggingError`>
     /// The guard for the log file, if any, is returned
     ///
     /// # Errors

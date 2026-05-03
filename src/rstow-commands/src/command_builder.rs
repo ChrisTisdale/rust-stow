@@ -316,7 +316,7 @@ impl<T: CommandOperation<DirectoryReader> + Default> StowCommandBuilder<T> {
     /// if all required fields are properly initialized. If any required fields are
     /// missing, an appropriate error is returned.
     ///
-    /// returns: Result<Command<T>, `CommandBuildError`> A `Command` object constructed from the builder's configuration.
+    /// returns: `Result<Command<T>, CommandBuildError>` A `Command` object constructed from the builder's configuration.
     ///
     /// # Errors
     ///
@@ -455,7 +455,7 @@ impl<T: CommandOperation<DirectoryReader> + Default> RestowCommandBuilder<T> {
     /// if all required fields are properly initialized. If any required fields are
     /// missing, an appropriate error is returned.
     ///
-    /// returns: Result<Command<T>, `CommandBuildError`> A `Command` object constructed from the builder's configuration.
+    /// returns: `Result<Command<T>, CommandBuildError>` A `Command` object constructed from the builder's configuration.
     ///
     /// # Errors
     ///
