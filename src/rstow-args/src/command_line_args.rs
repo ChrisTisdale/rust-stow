@@ -50,7 +50,7 @@ impl Display for ProcessCommands {
 #[derive(Args)]
 struct ProcessCommandArgs {
     #[arg(
-        short = 's',
+        short = 'S',
         long = "stow",
         help = "Stow packages into the target directory, creating symbolic links for each file. This is the default operation if no command is specified.",
         conflicts_with = "delete",
