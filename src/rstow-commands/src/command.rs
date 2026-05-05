@@ -361,7 +361,7 @@ impl<TIter: Iterator<Item = Result<PathBuf, CommandError>>, TCommand: CommandOpe
             )?;
 
             Ok(())
-        } else if Self::should_override(full_path, &args.options.filter) {
+        } else if Self::should_override(full_path, &args.options.filter) && operation.is_file(full_path) {
             info!("Overriding existing file: {}", full_path.display());
             operation.remove_item(full_path)?;
             operation.link_item(item, full_path)?;

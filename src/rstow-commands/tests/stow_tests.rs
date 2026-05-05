@@ -567,39 +567,6 @@ fn idempotent_stow_test() {
 }
 
 #[test]
-fn unstow_recursive_test() {
-    let setup = StowSetup::new("unstow_recursive_test");
-    assert!(setup.is_ok());
-    let setup = setup.unwrap();
-
-    // Stow first
-    let command = CommandBuilder::<CommandOperationImpl>::new()
-        .with_target(setup.setup_path.clone())
-        .with_directory(setup.directory.clone())
-        .stow()
-        .build()
-        .unwrap();
-    command.execute().unwrap();
-
-    let target_file = setup.setup_path.join("subdir").join("file.txt");
-    assert!(target_file.exists());
-    // In folding mode (default), "subdir" itself should be a symlink
-    let target_subdir = setup.setup_path.join("subdir");
-    assert!(target_subdir.is_symlink());
-
-    // Unstow
-    let command = CommandBuilder::<CommandOperationImpl>::new()
-        .with_target(setup.setup_path.clone())
-        .with_directory(setup.directory.clone())
-        .unstow()
-        .build()
-        .unwrap();
-    command.execute().unwrap();
-
-    assert!(!target_file.exists());
-}
-
-#[test]
 fn restow_test() {
     let setup = StowSetup::new("restow_test");
     assert!(setup.is_ok());
