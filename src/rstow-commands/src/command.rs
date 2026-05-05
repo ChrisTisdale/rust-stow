@@ -187,37 +187,55 @@ impl<TIter: Iterator<Item = Result<PathBuf, CommandError>>, TCommand: CommandOpe
         Ok(())
     }
 
-    fn is_ignored(entry_path: &Path, filter: &StowFilter) -> bool {
+    fn path_matches_filter<TMethod: Display + ?Sized, TMatcher: Matcher>(
+        caller: &TMethod,
+        entry_path: &Path,
+        filters: &[TMatcher],
+    ) -> bool {
         trace!(
-            "Checking if ignore file matches entry: {}",
+            "{caller} - Checking if file matches entry: {}",
             entry_path.display()
         );
 
-        for matcher in &filter.ignored {
-            if let Some(name) = entry_path.as_os_str().to_str() {
+        if let Some(name) = entry_path.as_os_str().to_str() {
+            for matcher in filters {
                 if matcher.is_match(name.as_bytes()).unwrap_or(false) {
-                    let overridden = filter
-                        .overrides
-                        .iter()
-                        .any(|o| o.is_match(name.as_bytes()).unwrap_or(false));
-
-                    trace!(
-                        "Ignoring entry: {}.  Overriding: {}",
-                        entry_path.display(),
-                        overridden
-                    );
-
-                    return !overridden;
+                    info!("{caller} - entry found: {}", entry_path.display());
+                    return true;
                 }
-            } else {
-                warn!(
-                    "Failed to get file name for entry: {}",
-                    entry_path.display()
-                );
             }
+        } else {
+            warn!(
+                "Failed to get file name for entry: {}",
+                entry_path.display()
+            );
+
+            return false;
         }
 
+        debug!(
+            "{caller} - No matching entry found: {}",
+            entry_path.display()
+        );
         false
+    }
+
+    fn is_ignored(entry_path: &Path, filter: &StowFilter) -> bool {
+        trace!(
+            "Checking if item should be ignored: {}",
+            entry_path.display()
+        );
+
+        Self::path_matches_filter("Ignored", entry_path, &filter.ignored)
+    }
+
+    fn should_override(entry_path: &Path, filter: &StowFilter) -> bool {
+        trace!(
+            "Checking if item should be overridden: {}",
+            entry_path.display()
+        );
+
+        Self::path_matches_filter("Override", entry_path, &filter.overrides)
     }
 
     fn process_directory_entry(entry: &Path, args: &StowData, operation: &mut TCommand) -> Result<(), CommandError> {
@@ -326,7 +344,7 @@ impl<TIter: Iterator<Item = Result<PathBuf, CommandError>>, TCommand: CommandOpe
         if operation.is_symlink(full_path) && operation.read_link(full_path)? == item {
             info!("Skipping existing symlink: {}", full_path.display());
             Ok(())
-        } else if operation.is_directory(item) {
+        } else if operation.is_directory(item) && operation.is_directory(full_path) {
             info!(
                 "Directory already exists traversing its children.  Stowing children of: {}",
                 full_path.display()
@@ -341,6 +359,12 @@ impl<TIter: Iterator<Item = Result<PathBuf, CommandError>>, TCommand: CommandOpe
                 },
                 operation,
             )?;
+
+            Ok(())
+        } else if Self::should_override(full_path, &args.options.filter) {
+            info!("Overriding existing file: {}", full_path.display());
+            operation.remove_item(full_path)?;
+            operation.link_item(item, full_path)?;
 
             Ok(())
         } else {

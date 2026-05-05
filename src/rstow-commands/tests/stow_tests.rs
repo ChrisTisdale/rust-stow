@@ -287,11 +287,84 @@ fn no_folding_stow_test() {
 }
 
 #[test]
-fn overrides_stow_test() {
-    let setup = StowSetup::new("override_test");
+fn override_existing_file_test() {
+    let setup = StowSetup::new("override_file_test");
     assert!(setup.is_ok());
     let setup = setup.unwrap();
-    let expected_files = [setup.setup_path.join("ignored-but-overridden.txt")];
+
+    let target_file = setup.setup_path.join("file.txt");
+    fs::write(&target_file, "existing content").unwrap();
+
+    let mut overrides = HashSet::new();
+    overrides.insert(".*file.txt".to_string());
+
+    let command = CommandBuilder::<CommandOperationImpl>::new()
+        .with_target(setup.setup_path.clone())
+        .with_directory(setup.directory.clone())
+        .stow()
+        .with_overrides(overrides)
+        .build();
+
+    assert!(command.is_ok());
+    let command = command.unwrap();
+
+    let result = command.execute();
+    assert!(result.is_ok());
+
+    assert!(target_file.exists());
+    assert!(target_file.is_symlink());
+    let link_target = fs::read_link(&target_file).unwrap();
+    assert!(link_target.ends_with("file.txt"));
+    assert_eq!(
+        fs::read_to_string(&target_file).unwrap(),
+        "original content\n"
+    );
+}
+
+#[test]
+fn directory_vs_file_conflict_test() {
+    let setup = StowSetup::new("dir_conflict_test");
+    assert!(setup.is_ok());
+    let setup = setup.unwrap();
+
+    // Target has a file named "dir1"
+    let target_dir1 = setup.setup_path.join("dir1");
+    fs::write(&target_dir1, "i am a file").unwrap();
+
+    // Source has a directory named "dir1" (setup by StowSetup::new from our manual mkdir)
+
+    let command = CommandBuilder::<CommandOperationImpl>::new()
+        .with_target(setup.setup_path.clone())
+        .with_directory(setup.directory.clone())
+        .stow()
+        .build();
+
+    assert!(command.is_ok());
+    let command = command.unwrap();
+
+    let result = command.execute();
+    assert!(result.is_err());
+    match result.unwrap_err() {
+        CommandError::DirectoryEntryAlreadyExists(name) => {
+            assert_eq!(name, "dir1");
+        }
+        e => panic!("Expected DirectoryEntryAlreadyExists error, got {e:?}"),
+    }
+
+    // It should NOT have stowed (since it's not overridden and is_directory(item) && is_directory(full_path) is false)
+    assert!(target_dir1.exists());
+    assert!(!target_dir1.is_symlink());
+    assert!(target_dir1.is_file());
+    assert_eq!(fs::read_to_string(&target_dir1).unwrap(), "i am a file");
+}
+
+#[test]
+fn ignored_is_not_overridden_test() {
+    let setup = StowSetup::new("ignore_override_test");
+    assert!(setup.is_ok());
+    let setup = setup.unwrap();
+
+    let target_file = setup.setup_path.join("ignored-and-overridden.txt");
 
     let mut ignored = HashSet::new();
     ignored.insert(".*ignored.*".to_string());
@@ -312,9 +385,10 @@ fn overrides_stow_test() {
 
     let result = command.execute();
     assert!(result.is_ok());
-    validate_stow_result(&setup.setup_path, &expected_files);
-    assert!(setup.setup_path.join("ignored-but-overridden.txt").exists());
-    assert!(!setup.setup_path.join("truly-ignored.txt").exists());
+
+    // With the change, is_ignored returns true if matched, and doesn't check overrides.
+    // So the file should NOT be stowed.
+    assert!(!target_file.exists());
 }
 
 #[test]
@@ -490,4 +564,70 @@ fn idempotent_stow_test() {
     let result2 = command2.execute();
     assert!(result2.is_ok());
     validate_stow_result(&setup.setup_path, &expected_files);
+}
+
+#[test]
+fn unstow_recursive_test() {
+    let setup = StowSetup::new("unstow_recursive_test");
+    assert!(setup.is_ok());
+    let setup = setup.unwrap();
+
+    // Stow first
+    let command = CommandBuilder::<CommandOperationImpl>::new()
+        .with_target(setup.setup_path.clone())
+        .with_directory(setup.directory.clone())
+        .stow()
+        .build()
+        .unwrap();
+    command.execute().unwrap();
+
+    let target_file = setup.setup_path.join("subdir").join("file.txt");
+    assert!(target_file.exists());
+    // In folding mode (default), "subdir" itself should be a symlink
+    let target_subdir = setup.setup_path.join("subdir");
+    assert!(target_subdir.is_symlink());
+
+    // Unstow
+    let command = CommandBuilder::<CommandOperationImpl>::new()
+        .with_target(setup.setup_path.clone())
+        .with_directory(setup.directory.clone())
+        .unstow()
+        .build()
+        .unwrap();
+    command.execute().unwrap();
+
+    assert!(!target_file.exists());
+}
+
+#[test]
+fn restow_test() {
+    let setup = StowSetup::new("restow_test");
+    assert!(setup.is_ok());
+    let setup = setup.unwrap();
+
+    let target_file = setup.setup_path.join("file.txt");
+
+    // Initial stow via restow
+    let command = CommandBuilder::<CommandOperationImpl>::new()
+        .with_target(setup.setup_path.clone())
+        .with_directory(setup.directory.clone())
+        .restow()
+        .build()
+        .unwrap();
+    command.execute().unwrap();
+
+    assert!(target_file.exists());
+    assert!(target_file.is_symlink());
+
+    // Restow again
+    let command = CommandBuilder::<CommandOperationImpl>::new()
+        .with_target(setup.setup_path.clone())
+        .with_directory(setup.directory.clone())
+        .restow()
+        .build()
+        .unwrap();
+    let result = command.execute();
+    assert!(result.is_ok());
+    assert!(target_file.exists());
+    assert!(target_file.is_symlink());
 }
