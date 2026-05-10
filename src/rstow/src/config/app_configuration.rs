@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::{Config, ConfigError, LoggingError};
+use crate::config::{Config, ConfigError, LoggingError};
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::io::stderr;

@@ -16,8 +16,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::LevelError;
-use crate::rotation_error::RotationError;
+use crate::config::LevelError;
+use crate::config::rotation_error::RotationError;
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, de};
 use std::fmt::Display;

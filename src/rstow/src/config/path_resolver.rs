@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::ConfigError;
+use crate::config::ConfigError;
 use std::env;
 use std::path::{Path, PathBuf};
 

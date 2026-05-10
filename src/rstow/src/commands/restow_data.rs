@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::{StowData, StowOptions, UnstowData};
+use crate::commands::{StowData, StowOptions, UnstowData};
 use std::path::PathBuf;
 
 pub struct RestowData {

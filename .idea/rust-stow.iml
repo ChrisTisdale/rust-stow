@@ -10,6 +10,7 @@
       <sourceFolder url="file://$MODULE_DIR$/src/rstow-config/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/rstow-args/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/src/rstow-commands/tests" isTestSource="true" />
+      <sourceFolder url="file://$MODULE_DIR$/src/rstow/test_data" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

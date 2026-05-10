@@ -16,9 +16,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::command::CommandData;
-use crate::command_operation::SimulatedData;
-use crate::{
+use crate::commands::command::CommandData;
+use crate::commands::command_operation::SimulatedData;
+use crate::commands::{
     Command, CommandBuildError, CommandOperation, CommandOperationImpl, DirectoryReader, RestowData, StowData,
     StowOptions, UnstowData,
 };
@@ -67,6 +67,7 @@ pub struct RestowCommandBuilder<T: CommandOperation<DirectoryReader>> {
     stow_command: StowCommandBuilder<T>,
 }
 
+#[allow(unused)]
 impl<T: CommandOperation<DirectoryReader> + Default> CommandBuilder<T> {
     /// Creates a new command builder with default settings.
     #[must_use]
@@ -137,6 +138,7 @@ impl<T: CommandOperation<DirectoryReader> + Default> CommandBuilder<T> {
     }
 }
 
+#[allow(unused)]
 impl<T: CommandOperation<DirectoryReader> + Default> UnstowCommandBuilder<T> {
     /// Creates a new unstow command builder with default settings.
     #[must_use]
@@ -224,6 +226,7 @@ impl<T: CommandOperation<DirectoryReader> + Default> UnstowCommandBuilder<T> {
     }
 }
 
+#[allow(unused)]
 impl<T: CommandOperation<DirectoryReader> + Default> StowCommandBuilder<T> {
     /// Creates a new stow command builder with default settings.
     #[must_use]
@@ -371,6 +374,7 @@ impl<T: CommandOperation<DirectoryReader> + Default> StowCommandBuilder<T> {
     }
 }
 
+#[allow(unused)]
 impl<T: CommandOperation<DirectoryReader> + Default> RestowCommandBuilder<T> {
     /// Creates a new restow command builder with default settings.
     #[must_use]

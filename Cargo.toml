@@ -1,5 +1,5 @@
 [workspace]
-members = ["src/rstow-config", "src/rstow", "src/rstow-commands", "xtask", "src/rstow-args"]
+members = ["src/rstow"]
 
 resolver = "3"
 

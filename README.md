@@ -108,16 +108,6 @@ level = "Info"
 By default, `rstow` looks for a `.rstow-ignore` file to determine which files should be skipped during stowing. This
 file supports regex patterns and comments starting with `#`.
 
-## Scripts
-
-The project uses `xtask` for custom automation.
-
-- **Build and Distribute**:
-  ```bash
-  cargo run --package xtask -- dist
-  ```
-  This command builds the application in release mode and generates man pages in `target/dist`.
-
 ## Environment Variables
 
 - `XDG_CONFIG_HOME`: Used to locate configuration files (e.g., `$XDG_CONFIG_HOME/rstow/.rstow.toml`).
@@ -132,16 +122,6 @@ Run the test suite using Cargo:
 ```bash
 cargo test
 ```
-
-## Project Structure
-
-This repository is organized as a Rust workspace:
-
-- `src/rstow`: The main CLI application entry point.
-- `src/rstow-args`: Command-line argument parsing and CLI logic (using `clap`).
-- `src/rstow-commands`: Core logic for stow, unstow, and restow operations.
-- `src/rstow-config`: Configuration loading and management (using `serde` and `toml`).
-- `xtask`: Custom build and distribution tasks (e.g., man page generation).
 
 ## License
 

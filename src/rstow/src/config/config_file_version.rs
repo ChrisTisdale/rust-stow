@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::version_error::VersionError;
+use crate::config::version_error::VersionError;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::str::FromStr;

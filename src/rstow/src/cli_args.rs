@@ -16,20 +16,17 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-mod command;
-mod command_build_error;
-mod command_builder;
-mod command_error;
-mod command_operation;
-mod restow_data;
-mod stow_data;
-mod unstow_data;
+use crate::commands::{Command, CommandOperation, DirectoryReader};
+use std::fmt::{Display, Formatter};
+use tracing_appender::non_blocking::WorkerGuard;
 
-pub use command::Command;
-pub use command_build_error::CommandBuildError;
-pub use command_builder::{CommandBuilder, RestowCommandBuilder, StowCommandBuilder, UnstowCommandBuilder};
-pub use command_error::CommandError;
-pub use command_operation::{CommandOperation, CommandOperationImpl, DirectoryReader};
-pub use restow_data::RestowData;
-pub use stow_data::{StowData, StowOptions};
-pub use unstow_data::UnstowData;
+pub struct CliArgs<T: CommandOperation<DirectoryReader>> {
+    pub command: Command<DirectoryReader, T>,
+    pub(crate) _guard: Option<WorkerGuard>,
+}
+
+impl<T: CommandOperation<DirectoryReader>> Display for CliArgs<T> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "CliArgs {{ command: {} }}", self.command)
+    }
+}

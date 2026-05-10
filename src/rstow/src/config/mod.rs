@@ -16,10 +16,29 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::{
-    AppDirectories, ConfigError, ConfigFileVersion, DEFAULT_CONFIG_FILE, Ignored, LoggingConfig, Overrides,
-    path_resolver,
-};
+mod app_configuration;
+mod app_directories;
+mod config_error;
+mod config_file_version;
+mod ignored;
+mod logging_config;
+mod logging_error;
+
+mod level_error;
+mod overrides;
+pub mod path_resolver;
+mod rotation_error;
+mod version_error;
+
+pub use app_configuration::{AppConfiguration, DEFAULT_CONFIG_FILE};
+pub use app_directories::AppDirectories;
+pub use config_error::ConfigError;
+pub use config_file_version::ConfigFileVersion;
+pub use ignored::Ignored;
+pub use level_error::LevelError;
+pub use logging_config::LoggingConfig;
+pub use logging_error::LoggingError;
+pub use overrides::Overrides;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::path::Path;
@@ -113,7 +132,7 @@ impl Config {
 #[cfg(test)]
 mod test {
     use super::*;
-    use crate::logging_config::{LoggingLevel, RotationType};
+    use crate::config::logging_config::{LoggingLevel, RotationType};
     use std::path::PathBuf;
 
     #[test]

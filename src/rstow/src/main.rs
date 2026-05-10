@@ -16,7 +16,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use rstow_args::{CliError, CommandLineProcessor};
+mod cli_args;
+mod cli_errors;
+mod command_line_args;
+mod commands;
+mod config;
+
+use crate::cli_errors::CliError;
+use crate::command_line_args::CommandLineProcessor;
 use tracing::{info, trace};
 
 fn main() -> Result<(), CliError> {

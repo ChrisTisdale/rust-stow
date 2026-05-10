@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::CommandError;
+use crate::commands::CommandError;
 use std::fs::ReadDir;
 use std::path::{Path, PathBuf};
 use std::{fs, os};

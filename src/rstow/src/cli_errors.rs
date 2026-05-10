@@ -23,7 +23,7 @@ use thiserror::Error;
 #[non_exhaustive]
 pub enum CliError {
     #[error(transparent)]
-    LoggingError(#[from] rstow_config::LoggingError),
+    LoggingError(#[from] crate::config::LoggingError),
     #[error(transparent)]
     InvalidPath(#[from] std::io::Error),
     #[error(transparent)]
@@ -31,9 +31,9 @@ pub enum CliError {
     #[error(transparent)]
     MatchingError(#[from] clap::parser::MatchesError),
     #[error(transparent)]
-    InvalidConfigFile(#[from] rstow_config::ConfigError),
+    InvalidConfigFile(#[from] crate::config::ConfigError),
     #[error(transparent)]
-    CommandError(#[from] rstow_commands::CommandError),
+    CommandError(#[from] crate::commands::CommandError),
     #[error("Invalid target directory.  The target directory must exist and be a directory.")]
     InvalidTargetDirectory,
     #[error(transparent)]
@@ -41,5 +41,5 @@ pub enum CliError {
     #[error("Invalid configuration file: {0}")]
     InvalidConfigurationFile(String),
     #[error(transparent)]
-    CommandBuildError(#[from] rstow_commands::CommandBuildError),
+    CommandBuildError(#[from] crate::commands::CommandBuildError),
 }

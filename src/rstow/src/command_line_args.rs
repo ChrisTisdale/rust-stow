@@ -16,12 +16,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use crate::{CliArgs, CliError};
+use crate::CliError;
+use crate::cli_args::CliArgs;
+use crate::commands::{CommandBuilder, CommandOperationImpl};
+use crate::config::{AppConfiguration, DEFAULT_CONFIG_FILE, path_resolver};
 use clap::builder::Styles;
 use clap::error::ErrorKind;
 use clap::{Args, CommandFactory, Parser, ValueHint};
-use rstow_commands::{CommandBuilder, CommandOperationImpl};
-use rstow_config::{AppConfiguration, DEFAULT_CONFIG_FILE, path_resolver};
 use std::fmt::Display;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
