@@ -18,7 +18,9 @@
 
 use crate::commands::{StowData, StowOptions, UnstowData};
 use std::path::PathBuf;
+use tracing::instrument;
 
+#[derive(Debug, Clone)]
 pub struct RestowData {
     pub(crate) unstow_data: UnstowData,
     pub(crate) stow_data: StowData,
@@ -26,10 +28,13 @@ pub struct RestowData {
 
 impl From<RestowData> for UnstowData {
     fn from(restow_data: RestowData) -> Self {
-        Self::new(
-            restow_data.stow_data.target,
-            restow_data.stow_data.directory,
-        )
+        restow_data.unstow_data
+    }
+}
+
+impl From<RestowData> for StowData {
+    fn from(restow_data: RestowData) -> Self {
+        restow_data.stow_data
     }
 }
 
@@ -47,9 +52,14 @@ impl AsRef<StowData> for RestowData {
 
 impl RestowData {
     #[must_use]
+    #[instrument(level = "trace")]
     pub fn new(target: PathBuf, directory: PathBuf, options: StowOptions) -> Self {
         Self {
-            unstow_data: UnstowData::new(target.clone(), directory.clone()),
+            unstow_data: UnstowData::new(
+                target.clone(),
+                directory.clone(),
+                options.dot_file_prefix.clone(),
+            ),
             stow_data: StowData::new(target, directory, options),
         }
     }

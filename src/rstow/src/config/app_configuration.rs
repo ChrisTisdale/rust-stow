@@ -20,6 +20,7 @@ use crate::config::{Config, ConfigError, LoggingError};
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::io::stderr;
+use std::ops::BitOr;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 use supports_color::Stream;
@@ -28,7 +29,7 @@ use tracing_appender::non_blocking::WorkerGuard;
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::fmt::SubscriberBuilder;
-use tracing_subscriber::fmt::format::{Compact, DefaultFields, Format};
+use tracing_subscriber::fmt::format::{Compact, DefaultFields, FmtSpan, Format};
 
 pub const DEFAULT_CONFIG_FILE: &str = ".rstow.toml";
 
@@ -171,15 +172,18 @@ impl AppConfiguration {
             .map_or_else(
                 || {
                     subscriber::set_global_default(
-                        self.get_default_trace_builder(config_level)
+                        Self::get_default_trace_builder(config_level)
+                            .with_ansi(
+                                self.config.logging.color_support.unwrap_or(true)
+                                    && supports_color::on(Stream::Stderr).is_some(),
+                            )
                             .with_writer(stderr)
                             .finish(),
                     )?;
                     Ok(None)
                 },
                 |(appender, guard)| {
-                    let subscriber = self
-                        .get_default_trace_builder(config_level)
+                    let subscriber = Self::get_default_trace_builder(config_level)
                         .with_ansi(false)
                         .with_writer(appender)
                         .finish();
@@ -317,19 +321,17 @@ impl AppConfiguration {
             .ok()
     }
 
-    fn get_default_trace_builder(&self, log_level: LevelFilter) -> SubscriberBuilder<DefaultFields, Format<Compact>> {
+    fn get_default_trace_builder(log_level: LevelFilter) -> SubscriberBuilder<DefaultFields, Format<Compact>> {
         tracing_subscriber::fmt()
             .compact()
             .with_level(true)
             .with_max_level(log_level)
             .with_file(true)
             .log_internal_errors(true)
+            .with_span_events(FmtSpan::ENTER.bitor(FmtSpan::CLOSE).bitor(FmtSpan::EXIT))
             .with_line_number(false)
             .with_thread_ids(true)
             .with_thread_names(true)
             .with_target(true)
-            .with_ansi(
-                self.config.logging.color_support.unwrap_or(true) && supports_color::on(Stream::Stderr).is_some(),
-            )
     }
 }

@@ -20,7 +20,7 @@ use crate::commands::CommandError;
 use std::fs::ReadDir;
 use std::path::{Path, PathBuf};
 use std::{fs, os};
-use tracing::{debug, info, warn};
+use tracing::{debug, info, instrument, warn};
 
 pub trait CommandOperation<T: Iterator<Item = Result<PathBuf, CommandError>>> {
     /// Creates a symbolic link from the `source` path to the `target` path.
@@ -389,6 +389,7 @@ impl Iterator for DirectoryReader {
 
 impl CommandOperation<DirectoryReader> for CommandOperationImpl {
     #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[instrument(level = "trace")]
     fn link_item(&mut self, item: &Path, target: &Path) -> Result<(), CommandError> {
         match self {
             Self::Default => {
@@ -409,6 +410,7 @@ impl CommandOperation<DirectoryReader> for CommandOperationImpl {
     }
 
     #[cfg(target_os = "windows")]
+    #[instrument(level = "trace")]
     fn link_item(&mut self, item: &Path, target: &Path) -> Result<(), CommandError> {
         match self {
             Self::Default => {
@@ -433,6 +435,7 @@ impl CommandOperation<DirectoryReader> for CommandOperationImpl {
     }
 
     #[cfg(any(target_os = "macos", target_os = "linux"))]
+    #[instrument(level = "trace")]
     fn remove_link(&mut self, entry_path: &Path) -> Result<(), CommandError> {
         if !self.is_symlink(entry_path) {
             warn!("Not a symlink: {}", entry_path.display());
@@ -453,6 +456,7 @@ impl CommandOperation<DirectoryReader> for CommandOperationImpl {
     }
 
     #[cfg(target_os = "windows")]
+    #[instrument(level = "trace")]
     fn remove_link(&mut self, entry_path: &Path) -> Result<(), CommandError> {
         if !self.is_symlink(entry_path) {
             warn!("Not a symlink: {}", entry_path.display());
@@ -476,11 +480,17 @@ impl CommandOperation<DirectoryReader> for CommandOperationImpl {
         Ok(())
     }
 
+    #[instrument(level = "trace")]
     fn remove_item(&mut self, target: &Path) -> Result<(), CommandError> {
         match self {
             Self::Default => {
-                debug!("Deleting file: {}", target.display());
-                fs::remove_file(target)?;
+                if self.is_directory(target) {
+                    debug!("Deleting directory: {}", target.display());
+                    fs::remove_dir(target)?;
+                } else {
+                    debug!("Deleting file: {}", target.display());
+                    fs::remove_file(target)?;
+                }
             }
             Self::Simulated(_) => println!("RM: {}", target.display()),
         }
@@ -488,6 +498,7 @@ impl CommandOperation<DirectoryReader> for CommandOperationImpl {
         Ok(())
     }
 
+    #[instrument(level = "trace")]
     fn create_directory(&mut self, target: &Path) -> Result<(), CommandError> {
         match self {
             Self::Default => {
@@ -503,6 +514,7 @@ impl CommandOperation<DirectoryReader> for CommandOperationImpl {
         Ok(())
     }
 
+    #[instrument(level = "trace")]
     fn is_directory(&self, target: &Path) -> bool {
         if fs::metadata(target).is_ok_and(|meta| meta.is_dir()) {
             return true;
@@ -514,18 +526,22 @@ impl CommandOperation<DirectoryReader> for CommandOperationImpl {
         }
     }
 
+    #[instrument(level = "trace")]
     fn is_file(&self, target: &Path) -> bool {
         fs::metadata(target).is_ok_and(|meta| meta.is_file())
     }
 
+    #[instrument(level = "trace")]
     fn is_symlink(&self, target: &Path) -> bool {
         fs::symlink_metadata(target).is_ok_and(|meta| meta.is_symlink())
     }
 
+    #[instrument(level = "trace")]
     fn read_link(&self, target: &Path) -> Result<PathBuf, CommandError> {
         target.read_link().map_err(Into::into)
     }
 
+    #[instrument(level = "trace")]
     fn exists(&self, target: &Path) -> bool {
         if fs::exists(target).unwrap_or(false) {
             return true;
@@ -543,6 +559,7 @@ impl CommandOperation<DirectoryReader> for CommandOperationImpl {
         }
     }
 
+    #[instrument(level = "trace")]
     fn read_directory(&self, target: &Path) -> Result<DirectoryReader, CommandError> {
         fs::read_dir(target).map_err(Into::into).map(Into::into)
     }

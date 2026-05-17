@@ -20,9 +20,9 @@ use crate::commands::stow_data::StowFilter;
 use crate::commands::{CommandError, CommandOperation, RestowData, StowData, UnstowData};
 use grep::matcher::Matcher;
 use std::ffi::{OsStr, OsString};
-use std::fmt::{Display, Formatter};
+use std::fmt::{Debug, Display, Formatter};
 use std::path::{Path, PathBuf};
-use tracing::{debug, error, info, trace, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 /// Represents a structure that encapsulates data and an associated operation related to command processing.
 ///
@@ -83,7 +83,7 @@ pub struct CommandData<
 ///     if let Some(parent) = parent {
 ///         let builder = CommandBuilder::<CommandOperationImpl>::new()
 ///             .with_directory(directory)
-///             .with_target(parent)
+///             .clone_with_target(parent)
 ///             .stow();
 ///         let command = builder.build()?;
 ///         println!("Built command: {command}");
@@ -106,6 +106,18 @@ impl<TIter: Iterator<Item = Result<PathBuf, CommandError>>, TCommand: CommandOpe
             Self::Stow(_) => write!(f, "Stow"),
             Self::Unstow(_) => write!(f, "UnStow"),
             Self::Restow(_) => write!(f, "ReStow"),
+        }
+    }
+}
+
+impl<TIter: Iterator<Item = Result<PathBuf, CommandError>>, TCommand: CommandOperation<TIter>> Debug
+    for Command<TIter, TCommand>
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Stow(d) => f.debug_struct("Stow").field("data", &d.data).finish(),
+            Self::Unstow(d) => f.debug_struct("Unstow").field("data", &d.data).finish(),
+            Self::Restow(d) => f.debug_struct("Restow").field("data", &d.data).finish(),
         }
     }
 }
@@ -138,7 +150,7 @@ impl<TIter: Iterator<Item = Result<PathBuf, CommandError>>, TCommand: CommandOpe
     ///     if let Some(parent) = parent {
     ///         let builder = CommandBuilder::<CommandOperationImpl>::new()
     ///             .with_directory(directory)
-    ///             .with_target(parent)
+    ///             .clone_with_target(parent)
     ///             .stow();
     ///         let command = builder.build()?;
     ///         command.execute()?;
@@ -147,6 +159,7 @@ impl<TIter: Iterator<Item = Result<PathBuf, CommandError>>, TCommand: CommandOpe
     ///     return Ok(());
     /// }
     /// ```
+    #[instrument(level = "trace")]
     pub fn execute(self) -> Result<(), CommandError> {
         match self {
             Self::Stow(mut a) => Self::process_stow(&a.data, &mut a.operation),
@@ -240,9 +253,21 @@ impl<TIter: Iterator<Item = Result<PathBuf, CommandError>>, TCommand: CommandOpe
 
     fn process_directory_entry(entry: &Path, args: &StowData, operation: &mut TCommand) -> Result<(), CommandError> {
         trace!("Processing directory entry: {}", entry.display());
+        Self::process_directory(entry, args, operation, Self::stow_item)
+    }
+
+    fn process_directory<TData, F>(
+        entry: &Path,
+        args: &TData,
+        operation: &mut TCommand,
+        mut processor: F,
+    ) -> Result<(), CommandError>
+    where
+        F: FnMut(&Path, &TData, &mut TCommand) -> Result<(), CommandError>,
+    {
         for entry in operation.read_directory(entry)? {
             match entry {
-                Ok(e) => Self::stow_item(&e, args, operation)?,
+                Ok(e) => processor(&e, args, operation)?,
                 Err(e) => warn!("Failed to read directory entry: {e}"),
             }
         }
@@ -278,7 +303,7 @@ impl<TIter: Iterator<Item = Result<PathBuf, CommandError>>, TCommand: CommandOpe
         }
 
         let no_folding = operation.is_directory(item) && args.options.no_folding;
-        let file_name = Self::get_file_name(item, args)?;
+        let file_name = Self::get_item_name(item, args.options.dot_file_prefix.as_ref())?;
         let full_path = args.target.join(file_name);
         trace!(
             "Stowing directory entry: {}.  With no folding: {}",
@@ -298,17 +323,17 @@ impl<TIter: Iterator<Item = Result<PathBuf, CommandError>>, TCommand: CommandOpe
         Ok(())
     }
 
-    fn get_file_name(item: &Path, args: &StowData) -> Result<OsString, CommandError> {
+    fn get_item_name(item: &Path, prefix: Option<&String>) -> Result<OsString, CommandError> {
         let file_name = item.file_name().map_or_else(
             || Err(CommandError::InvalidStowItem(item.display().to_string())),
             Ok,
         )?;
 
-        if let Some(prefix) = args.options.dot_file_prefix.as_ref()
+        if let Some(prefix) = prefix
             && let Some(name) = file_name.to_str()
-            && name.starts_with(prefix)
+            && let Some(stripped) = name.strip_prefix(prefix)
         {
-            let updated = ".".to_string() + name.trim_start_matches(prefix);
+            let updated = format!(".{stripped}");
             trace!("Updating file name: {name} to {updated}");
             return Ok(OsString::from(&updated));
         }
@@ -326,11 +351,7 @@ impl<TIter: Iterator<Item = Result<PathBuf, CommandError>>, TCommand: CommandOpe
         operation.create_directory(full_path)?;
         Self::process_directory_entry(
             entry_path,
-            &StowData {
-                directory: args.directory.clone(),
-                target: full_path.to_path_buf(),
-                options: args.options.clone(),
-            },
+            &args.clone_with_target(full_path.to_path_buf()),
             operation,
         )
     }
@@ -352,11 +373,7 @@ impl<TIter: Iterator<Item = Result<PathBuf, CommandError>>, TCommand: CommandOpe
 
             Self::process_directory_entry(
                 item,
-                &StowData {
-                    directory: args.directory.clone(),
-                    target: full_path.to_path_buf(),
-                    options: args.options.clone(),
-                },
+                &args.clone_with_target(full_path.to_path_buf()),
                 operation,
             )?;
 
@@ -380,61 +397,64 @@ impl<TIter: Iterator<Item = Result<PathBuf, CommandError>>, TCommand: CommandOpe
     }
 
     fn process_unstow(args: &UnstowData, operation: &mut TCommand) -> Result<(), CommandError> {
-        info!("Unstowing files");
-        Self::unstow_directory_filter(&args.target, args, operation, |path| path == args.directory)?;
+        info!(
+            "Unstowing files from {} to {}",
+            args.directory.display(),
+            args.target.display()
+        );
+
+        Self::unstow_directory_entry(&args.directory, args, operation)?;
         Ok(())
     }
 
-    fn unstow_directory_filter<P>(
-        target: &Path,
-        args: &UnstowData,
-        operation: &mut TCommand,
-        mut skip: P,
-    ) -> Result<(), CommandError>
-    where
-        P: FnMut(&Path) -> bool,
-    {
-        for entry in operation.read_directory(target)? {
-            match entry {
-                Ok(e) => {
-                    trace!("Reviewing directory entry: {}", e.display());
-                    if skip(&e) {
-                        info!("Skipping target directory: {}", e.display());
-                        continue;
-                    }
+    fn unstow_directory_entry(entry: &Path, args: &UnstowData, operation: &mut TCommand) -> Result<(), CommandError> {
+        Self::process_directory(entry, args, operation, Self::unstow_item)
+    }
 
-                    Self::cleanup_symlink(args, &e, operation)?;
-                }
-                Err(e) => warn!("Failed to read directory entry: {e}"),
+    fn unstow_item(item: &Path, args: &UnstowData, operation: &mut TCommand) -> Result<(), CommandError> {
+        let item_name = Self::get_item_name(item, args.dot_file_prefix.as_ref())?;
+        let full_path = args.target.join(item_name);
+
+        if operation.is_symlink(&full_path) && operation.read_link(&full_path).is_ok_and(|p| p == item) {
+            info!("Removing symlink: {}", full_path.display());
+            operation.remove_link(&full_path)?;
+            Self::cleanup_empty_parent(&full_path, &args.target, operation)?;
+        } else if operation.is_directory(&full_path) && operation.is_directory(item) {
+            Self::unstow_directory_entry(item, &args.clone_with_target(full_path.clone()), operation)?;
+
+            if operation.is_directory(&full_path)
+                && operation
+                    .read_directory(&full_path)
+                    .is_ok_and(|mut entries| entries.next().is_none())
+            {
+                info!("Removing empty directory: {}", full_path.display());
+                operation.remove_item(&full_path)?;
+                Self::cleanup_empty_parent(&full_path, &args.target, operation)?;
             }
         }
+
         Ok(())
     }
 
-    fn unstow_directory(target: &Path, args: &UnstowData, operation: &mut TCommand) -> Result<(), CommandError> {
-        for entry in operation.read_directory(target)? {
-            match entry {
-                Ok(e) => {
-                    trace!("Reviewing directory entry: {}", e.display());
-                    Self::cleanup_symlink(args, &e, operation)?;
-                }
-                Err(e) => warn!("Failed to read directory entry: {e}"),
+    fn cleanup_empty_parent(path: &Path, target_root: &Path, operation: &mut TCommand) -> Result<(), CommandError> {
+        let mut current = path.parent();
+        while let Some(parent) = current {
+            if parent == target_root {
+                break;
+            }
+
+            if operation.is_directory(parent)
+                && operation
+                    .read_directory(parent)
+                    .is_ok_and(|mut entries| entries.next().is_none())
+            {
+                info!("Removing empty directory: {}", parent.display());
+                operation.remove_item(parent)?;
+                current = parent.parent();
+            } else {
+                break;
             }
         }
-        Ok(())
-    }
-
-    fn cleanup_symlink(args: &UnstowData, entry_path: &Path, operation: &mut TCommand) -> Result<(), CommandError> {
-        if operation.is_symlink(entry_path)
-            && operation
-                .read_link(entry_path)
-                .is_ok_and(|p| p.starts_with(&args.directory))
-        {
-            operation.remove_link(entry_path)?;
-        } else if operation.is_directory(entry_path) {
-            Self::unstow_directory(entry_path, args, operation)?;
-        }
-
         Ok(())
     }
 
@@ -463,17 +483,21 @@ mod tests {
 
     impl StowSetup {
         fn new(test_name: &str) -> Result<Self, Box<dyn Error>> {
+            Self::new_with_data(test_name, test_name)
+        }
+
+        fn new_with_data(scratch_name: &str, test_data_name: &str) -> Result<Self, Box<dyn Error>> {
             let project_root = env::var("CARGO_MANIFEST_DIR")?;
             let setup_path = PathBuf::from(&project_root)
                 .join("test_data")
                 .join("scratch")
                 .join("stow")
-                .join(test_name);
+                .join(scratch_name);
 
             let directory = PathBuf::from(project_root)
                 .join("test_data")
                 .join("stow_tests")
-                .join(test_name);
+                .join(test_data_name);
 
             if !setup_path.exists() {
                 fs::create_dir_all(&setup_path)?;
@@ -484,6 +508,12 @@ mod tests {
                 directory,
             })
         }
+
+        fn default_builder(&self) -> CommandBuilder<CommandOperationImpl> {
+            CommandBuilder::<CommandOperationImpl>::new()
+                .with_target(self.setup_path.clone())
+                .with_directory(self.directory.clone())
+        }
     }
 
     impl Drop for StowSetup {
@@ -493,7 +523,9 @@ mod tests {
     }
 
     fn validate_stow_result(path: &PathBuf, expected_files: &[PathBuf]) {
-        for file in fs::read_dir(path).unwrap() {
+        let entries = fs::read_dir(path);
+        assert!(entries.is_ok());
+        for file in entries.unwrap() {
             assert!(file.is_ok());
             let file = file.unwrap();
             let path = file.path();
@@ -523,15 +555,9 @@ mod tests {
         let result = fs::create_dir_all(setup.setup_path.join("existing-directory"));
         assert!(result.is_ok());
 
-        let command = CommandBuilder::<CommandOperationImpl>::new()
-            .with_target(setup.setup_path.clone())
-            .with_directory(setup.directory.clone())
-            .stow()
-            .build();
-
+        let command = setup.default_builder().stow().build();
         assert!(command.is_ok());
-        let command = command.unwrap();
-        let result = command.execute();
+        let result = command.unwrap().execute();
         assert!(result.is_ok());
         validate_stow_result(&setup.setup_path, &expected_files);
     }
@@ -546,15 +572,9 @@ mod tests {
             setup.setup_path.join("linked-directory"),
         ];
 
-        let command = CommandBuilder::<CommandOperationImpl>::new()
-            .with_target(setup.setup_path.clone())
-            .with_directory(setup.directory.clone())
-            .stow()
-            .build();
-
+        let command = setup.default_builder().stow().build();
         assert!(command.is_ok());
-        let command = command.unwrap();
-        let result = command.execute();
+        let result = command.unwrap().execute();
         assert!(result.is_ok());
         validate_stow_result(&setup.setup_path, &expected_files);
     }
@@ -569,17 +589,14 @@ mod tests {
             setup.setup_path.join("regular-file.txt"),
         ];
 
-        let command = CommandBuilder::<CommandOperationImpl>::new()
-            .with_target(setup.setup_path.clone())
-            .with_directory(setup.directory.clone())
+        let command = setup
+            .default_builder()
             .stow()
             .with_dot_file_prefix(Some("dot-".to_string()))
             .build();
-
         assert!(command.is_ok());
-        let command = command.unwrap();
 
-        let result = command.execute();
+        let result = command.unwrap().execute();
         assert!(result.is_ok());
         validate_stow_result(&setup.setup_path, &expected_files);
 
@@ -598,17 +615,14 @@ mod tests {
         let mut ignored = HashSet::new();
         ignored.insert("ignored-file.txt".to_string());
 
-        let command = CommandBuilder::<CommandOperationImpl>::new()
-            .with_target(setup.setup_path.clone())
-            .with_directory(setup.directory.clone())
+        let command = setup
+            .default_builder()
             .stow()
             .with_ignored(ignored)
             .build();
-
         assert!(command.is_ok());
-        let command = command.unwrap();
 
-        let result = command.execute();
+        let result = command.unwrap().execute();
         assert!(result.is_ok());
         validate_stow_result(&setup.setup_path, &expected_files);
         assert!(!setup.setup_path.join("ignored-file.txt").exists());
@@ -623,16 +637,10 @@ mod tests {
         let result = fs::write(setup.setup_path.join("conflict-file.txt"), "existing");
         assert!(result.is_ok());
 
-        let command = CommandBuilder::<CommandOperationImpl>::new()
-            .with_target(setup.setup_path.clone())
-            .with_directory(setup.directory.clone())
-            .stow()
-            .build();
-
+        let command = setup.default_builder().stow().build();
         assert!(command.is_ok());
-        let command = command.unwrap();
 
-        let result = command.execute();
+        let result = command.unwrap().execute();
         assert!(result.is_err());
         match result.unwrap_err() {
             CommandError::DirectoryEntryAlreadyExists(path) => {
@@ -649,16 +657,10 @@ mod tests {
         let setup = setup.unwrap();
         // In folding mode (default), dir1 should be linked directly
 
-        let command = CommandBuilder::<CommandOperationImpl>::new()
-            .with_target(setup.setup_path.clone())
-            .with_directory(setup.directory.clone())
-            .stow()
-            .build();
-
+        let command = setup.default_builder().stow().build();
         assert!(command.is_ok());
-        let command = command.unwrap();
 
-        let result = command.execute();
+        let result = command.unwrap().execute();
         assert!(result.is_ok());
 
         let dir1_path = setup.setup_path.join("dir1");
@@ -672,17 +674,14 @@ mod tests {
         let setup = setup.unwrap();
         // In no-folding mode, dir1 should be created and file1.txt linked inside it
 
-        let command = CommandBuilder::<CommandOperationImpl>::new()
-            .with_target(setup.setup_path.clone())
-            .with_directory(setup.directory.clone())
+        let command = setup
+            .default_builder()
             .stow()
             .with_no_folding(true)
             .build();
-
         assert!(command.is_ok());
-        let command = command.unwrap();
 
-        let result = command.execute();
+        let result = command.unwrap().execute();
         assert!(result.is_ok());
 
         let dir1_path = setup.setup_path.join("dir1");
@@ -701,30 +700,32 @@ mod tests {
         let setup = setup.unwrap();
 
         let target_file = setup.setup_path.join("file.txt");
-        fs::write(&target_file, "existing content").unwrap();
+        let result = fs::write(&target_file, "existing content");
+        assert!(result.is_ok());
 
         let mut overrides = HashSet::new();
         overrides.insert(".*file.txt".to_string());
 
-        let command = CommandBuilder::<CommandOperationImpl>::new()
-            .with_target(setup.setup_path.clone())
-            .with_directory(setup.directory.clone())
+        let command = setup
+            .default_builder()
             .stow()
             .with_overrides(overrides)
             .build();
-
         assert!(command.is_ok());
-        let command = command.unwrap();
 
-        let result = command.execute();
+        let result = command.unwrap().execute();
         assert!(result.is_ok());
 
         assert!(target_file.exists());
         assert!(target_file.is_symlink());
-        let link_target = fs::read_link(&target_file).unwrap();
+        let link_target = fs::read_link(&target_file);
+        assert!(link_target.is_ok());
+        let link_target = link_target.unwrap();
         assert!(link_target.ends_with("file.txt"));
+        let content = fs::read_to_string(&target_file);
+        assert!(content.is_ok());
         assert_eq!(
-            fs::read_to_string(&target_file).unwrap(),
+            content.unwrap(),
             "original content\n"
         );
     }
@@ -737,20 +738,15 @@ mod tests {
 
         // Target has a file named "dir1"
         let target_dir1 = setup.setup_path.join("dir1");
-        fs::write(&target_dir1, "i am a file").unwrap();
+        let result = fs::write(&target_dir1, "i am a file");
+        assert!(result.is_ok());
 
         // Source has a directory named "dir1" (setup by StowSetup::new from our manual mkdir)
 
-        let command = CommandBuilder::<CommandOperationImpl>::new()
-            .with_target(setup.setup_path.clone())
-            .with_directory(setup.directory.clone())
-            .stow()
-            .build();
-
+        let command = setup.default_builder().stow().build();
         assert!(command.is_ok());
-        let command = command.unwrap();
 
-        let result = command.execute();
+        let result = command.unwrap().execute();
         assert!(result.is_err());
         match result.unwrap_err() {
             CommandError::DirectoryEntryAlreadyExists(name) => {
@@ -763,7 +759,9 @@ mod tests {
         assert!(target_dir1.exists());
         assert!(!target_dir1.is_symlink());
         assert!(target_dir1.is_file());
-        assert_eq!(fs::read_to_string(&target_dir1).unwrap(), "i am a file");
+        let content = fs::read_to_string(&target_dir1);
+        assert!(content.is_ok());
+        assert_eq!(content.unwrap(), "i am a file");
     }
 
     #[test]
@@ -780,18 +778,15 @@ mod tests {
         let mut overrides = HashSet::new();
         overrides.insert(".*overridden.*".to_string());
 
-        let command = CommandBuilder::<CommandOperationImpl>::new()
-            .with_target(setup.setup_path.clone())
-            .with_directory(setup.directory.clone())
+        let command = setup
+            .default_builder()
             .stow()
             .with_ignored(ignored)
             .with_overrides(overrides)
             .build();
-
         assert!(command.is_ok());
-        let command = command.unwrap();
 
-        let result = command.execute();
+        let result = command.unwrap().execute();
         assert!(result.is_ok());
 
         // With the change, is_ignored returns true if matched, and doesn't check overrides.
@@ -807,7 +802,8 @@ mod tests {
         let target_path = setup.setup_path.join("non-existent-target");
         // Ensure target path does not exist
         if target_path.exists() {
-            fs::remove_dir_all(&target_path).unwrap();
+            let result = fs::remove_dir_all(&target_path);
+            assert!(result.is_ok());
         }
 
         let command = CommandBuilder::<CommandOperationImpl>::new()
@@ -815,11 +811,9 @@ mod tests {
             .with_directory(setup.directory.clone())
             .stow()
             .build();
-
         assert!(command.is_ok());
-        let command = command.unwrap();
 
-        let result = command.execute();
+        let result = command.unwrap().execute();
         assert!(result.is_err());
         match result.unwrap_err() {
             CommandError::InvalidTargetDirectory(path) => {
@@ -841,11 +835,9 @@ mod tests {
             .with_directory(stow_dir)
             .stow()
             .build();
-
         assert!(command.is_ok());
-        let command = command.unwrap();
 
-        let result = command.execute();
+        let result = command.unwrap().execute();
         assert!(result.is_err());
         match result.unwrap_err() {
             CommandError::StowDirectoryNotFound(path) => {
@@ -861,20 +853,20 @@ mod tests {
         assert!(setup.is_ok());
         let setup = setup.unwrap();
 
-        let command = CommandBuilder::<CommandOperationImpl>::new()
+        let command = setup
+            .default_builder()
             .with_target(setup.directory.clone())
-            .with_directory(setup.directory.clone())
             .stow()
             .build();
-
         assert!(command.is_ok());
-        let command = command.unwrap();
 
-        let result = command.execute();
+        let result = command.unwrap().execute();
         assert!(result.is_err());
         match result.unwrap_err() {
             CommandError::InvalidStowDirectory(path) => {
-                assert!(path.contains(setup.directory.to_str().unwrap()));
+                let dir_str = setup.directory.to_str();
+                assert!(dir_str.is_some());
+                assert!(path.contains(dir_str.unwrap()));
             }
             e => panic!("Expected InvalidStowDirectory error, got {e:?}"),
         }
@@ -889,16 +881,14 @@ mod tests {
         let result = fs::write(&target_path, "I am a file");
         assert!(result.is_ok());
 
-        let command = CommandBuilder::<CommandOperationImpl>::new()
+        let command = setup
+            .default_builder()
             .with_target(target_path)
-            .with_directory(setup.directory.clone())
             .stow()
             .build();
-
         assert!(command.is_ok());
-        let command = command.unwrap();
 
-        let result = command.execute();
+        let result = command.unwrap().execute();
         assert!(result.is_err());
         match result.unwrap_err() {
             CommandError::InvalidTargetDirectory(path) => {
@@ -916,7 +906,7 @@ mod tests {
             .build();
 
         assert!(result.is_err());
-        let err = result.err().unwrap();
+        let err = result.unwrap_err();
         match err {
             CommandBuildError::MissingTargetDirectory => {}
             e => panic!("Expected MissingTargetDirectory error, got {e:?}"),
@@ -931,7 +921,7 @@ mod tests {
             .build();
 
         assert!(result.is_err());
-        let err = result.err().unwrap();
+        let err = result.unwrap_err();
         match err {
             CommandBuildError::MissingStowDirectory => {}
             e => panic!("Expected MissingStowDirectory error, got {e:?}"),
@@ -946,31 +936,17 @@ mod tests {
         let expected_files = [setup.setup_path.join("file1.txt")];
 
         // First execution
-        let command = CommandBuilder::<CommandOperationImpl>::new()
-            .with_target(setup.setup_path.clone())
-            .with_directory(setup.directory.clone())
-            .stow()
-            .build();
-
+        let command = setup.default_builder().stow().build();
         assert!(command.is_ok());
-        let command = command.unwrap();
-
-        let result = command.execute();
+        let result = command.unwrap().execute();
         assert!(result.is_ok());
         validate_stow_result(&setup.setup_path, &expected_files);
 
         // Second execution - should be idempotent and skip existing correct links
-        let command2 = CommandBuilder::<CommandOperationImpl>::new()
-            .with_target(setup.setup_path.clone())
-            .with_directory(setup.directory.clone())
-            .stow()
-            .build();
-
+        let command2 = setup.default_builder().stow().build();
         assert!(command2.is_ok());
-        let command2 = command2.unwrap();
-
-        let result2 = command2.execute();
-        assert!(result2.is_ok());
+        let result = command2.unwrap().execute();
+        assert!(result.is_ok());
         validate_stow_result(&setup.setup_path, &expected_files);
     }
 
@@ -981,18 +957,17 @@ mod tests {
         let setup = setup.unwrap();
 
         let target_file = setup.setup_path.join("file.txt");
-        let command_provider = || -> Command<DirectoryReader, CommandOperationImpl> {
-            CommandBuilder::<CommandOperationImpl>::new()
-                .with_target(setup.setup_path.clone())
-                .with_directory(setup.directory.clone())
-                .restow()
-                .build()
-                .unwrap()
-        };
+        let command_provider =
+            || -> Command<DirectoryReader, CommandOperationImpl> {
+                let command = setup.default_builder().restow().build();
+                assert!(command.is_ok());
+                command.unwrap()
+            };
 
         // Initial stow via restow
         let command = command_provider();
-        command.execute().unwrap();
+        let result = command.execute();
+        assert!(result.is_ok());
 
         assert!(target_file.exists());
         assert!(target_file.is_symlink());
@@ -1003,5 +978,157 @@ mod tests {
         assert!(result.is_ok());
         assert!(target_file.exists());
         assert!(target_file.is_symlink());
+    }
+
+    #[test]
+    fn basic_unstow_test() {
+        let setup = StowSetup::new_with_data("basic_unstow_test", "basic_stow_test");
+        assert!(setup.is_ok());
+        let setup = setup.unwrap();
+
+        // Stow first
+        let command = setup
+            .default_builder()
+            .stow()
+            .build();
+        assert!(command.is_ok());
+        let result = command.unwrap().execute();
+        assert!(result.is_ok());
+
+        // Verify stowed
+        assert!(setup.setup_path.join("linked-file.txt").exists());
+        assert!(setup.setup_path.join("linked-directory").exists());
+
+        // Unstow
+        let command = setup
+            .default_builder()
+            .unstow()
+            .build();
+        assert!(command.is_ok());
+        let result = command.unwrap().execute();
+        assert!(result.is_ok());
+
+        // Verify unstowed
+        assert!(!setup.setup_path.join("linked-file.txt").exists());
+        assert!(!setup.setup_path.join("linked-directory").exists());
+    }
+
+    #[test]
+    fn unstow_with_folding_disabled_test() {
+        let setup = StowSetup::new_with_data("unstow_with_folding_disabled_test", "no_folding_test");
+        assert!(setup.is_ok());
+        let setup = setup.unwrap();
+
+        // Stow first with folding disabled
+        let command = setup
+            .default_builder()
+            .stow()
+            .with_no_folding(true)
+            .build();
+        assert!(command.is_ok());
+        let result = command.unwrap().execute();
+        assert!(result.is_ok());
+
+        // Verify stowed
+        let target_dir = setup.setup_path.join("dir1");
+        let target_file = target_dir.join("file1.txt");
+        assert!(target_dir.exists());
+        assert!(target_dir.is_dir());
+        assert!(target_file.exists());
+        assert!(target_file.is_symlink());
+
+        // Unstow
+        let command = setup
+            .default_builder()
+            .unstow()
+            .build();
+        assert!(command.is_ok());
+        let result = command.unwrap().execute();
+        assert!(result.is_ok());
+
+        // Verify unstowed and directory cleaned up
+        assert!(!target_file.exists());
+        assert!(!target_dir.exists());
+    }
+
+    #[test]
+    fn unstow_dotfiles_test() {
+        let setup = StowSetup::new_with_data("unstow_dotfiles_test", "dotfiles_test");
+        assert!(setup.is_ok());
+        let setup = setup.unwrap();
+
+        // Stow first with dot-file prefix
+        let command = setup
+            .default_builder()
+            .stow()
+            .with_dot_file_prefix(Some("dot-".to_string()))
+            .build();
+        assert!(command.is_ok());
+        let result = command.unwrap().execute();
+        assert!(result.is_ok());
+
+        // Verify stowed
+        let dot_bashrc = setup.setup_path.join(".bashrc");
+        let regular_file = setup.setup_path.join("regular-file.txt");
+        assert!(dot_bashrc.exists());
+        assert!(dot_bashrc.is_symlink());
+        assert!(regular_file.exists());
+        assert!(regular_file.is_symlink());
+
+        // Unstow
+        let command = setup
+            .default_builder()
+            .unstow()
+            .with_dot_file_prefix(Some("dot-".to_string()))
+            .build();
+        assert!(command.is_ok());
+        let result = command.unwrap().execute();
+        assert!(result.is_ok());
+
+        // Verify unstowed
+        assert!(!dot_bashrc.exists());
+        assert!(!regular_file.exists());
+    }
+
+    #[test]
+    fn unstow_nested_directories_test() {
+        let setup = StowSetup::new_with_data("unstow_nested_directories_test", "basic_stow_test");
+        assert!(setup.is_ok());
+        let setup = setup.unwrap();
+
+        // Stow first with folding disabled
+        let command = setup
+            .default_builder()
+            .stow()
+            .with_no_folding(true)
+            .build();
+        assert!(command.is_ok());
+        let result = command.unwrap().execute();
+        assert!(result.is_ok());
+
+        // Verify stowed
+        let target_dir = setup.setup_path.join("linked-directory");
+        let target_file = target_dir.join("sub-file.txt");
+        let target_file2 = setup.setup_path.join("linked-file.txt");
+        assert!(target_dir.exists());
+        assert!(target_dir.is_dir());
+        assert!(target_file.exists());
+        assert!(target_file.is_symlink());
+        assert!(target_file2.exists());
+        assert!(target_file2.is_symlink());
+
+        // Unstow
+        let command = setup
+            .default_builder()
+            .unstow()
+            .build();
+        assert!(command.is_ok());
+        let result = command.unwrap().execute();
+        assert!(result.is_ok());
+
+        // Verify unstowed and directory cleaned up
+        assert!(!target_file.exists());
+        assert!(!target_dir.exists());
+        assert!(!target_file2.exists());
     }
 }

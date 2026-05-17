@@ -10,5 +10,6 @@ target/
 *.pdb
 
 dist/
+.junie/
 
 .DS_Store

@@ -56,6 +56,7 @@ pub struct StowCommandBuilder<T: CommandOperation<DirectoryReader>> {
 #[derive(Default)]
 pub struct UnstowCommandBuilder<T: CommandOperation<DirectoryReader>> {
     builder: CommandBuilder<T>,
+    dot_file_prefix: Option<String>,
 }
 
 /// Builder for constructing restow commands.
@@ -126,7 +127,10 @@ impl<T: CommandOperation<DirectoryReader> + Default> CommandBuilder<T> {
     /// Converts this builder into an unstow-command builder.
     #[must_use]
     pub const fn unstow(self) -> UnstowCommandBuilder<T> {
-        UnstowCommandBuilder { builder: self }
+        UnstowCommandBuilder {
+            builder: self,
+            dot_file_prefix: None,
+        }
     }
 
     /// Converts this builder into a restow-command builder.
@@ -165,6 +169,7 @@ impl<T: CommandOperation<DirectoryReader> + Default> UnstowCommandBuilder<T> {
     pub fn simulate(self) -> UnstowCommandBuilder<CommandOperationImpl> {
         UnstowCommandBuilder::<CommandOperationImpl> {
             builder: self.builder.simulate(),
+            dot_file_prefix: self.dot_file_prefix,
         }
     }
 
@@ -173,7 +178,15 @@ impl<T: CommandOperation<DirectoryReader> + Default> UnstowCommandBuilder<T> {
     pub fn command(self) -> UnstowCommandBuilder<CommandOperationImpl> {
         UnstowCommandBuilder::<CommandOperationImpl> {
             builder: self.builder.command(),
+            dot_file_prefix: self.dot_file_prefix,
         }
+    }
+
+    /// Sets the dot file prefix for the unstow command.
+    #[must_use]
+    pub fn with_dot_file_prefix(mut self, prefix: Option<String>) -> Self {
+        self.dot_file_prefix = prefix;
+        self
     }
 
     /// Builds the unstow command with the provided configuration.
@@ -193,7 +206,7 @@ impl<T: CommandOperation<DirectoryReader> + Default> UnstowCommandBuilder<T> {
     ///
     /// let command = CommandBuilder::<CommandOperationImpl>::new()
     ///     .simulate()
-    ///     .with_target(Path::new("/path/to/target").to_path_buf())
+    ///     .clone_with_target(Path::new("/path/to/target").to_path_buf())
     ///     .with_directory(Path::new("/path/to/stow").to_path_buf())
     ///     .unstow()
     ///     .build();
@@ -217,7 +230,7 @@ impl<T: CommandOperation<DirectoryReader> + Default> UnstowCommandBuilder<T> {
             .directory
             .map_or_else(|| Err(CommandBuildError::MissingStowDirectory), Ok)?;
 
-        let data = UnstowData::new(target, directory);
+        let data = UnstowData::new(target, directory, self.dot_file_prefix);
         Ok(Command::Unstow(CommandData {
             data,
             operation: self.builder.operation,
@@ -334,7 +347,7 @@ impl<T: CommandOperation<DirectoryReader> + Default> StowCommandBuilder<T> {
     ///
     /// let command = CommandBuilder::<CommandOperationImpl>::new()
     ///     .simulate()
-    ///     .with_target(Path::new("/path/to/target").to_path_buf())
+    ///     .clone_with_target(Path::new("/path/to/target").to_path_buf())
     ///     .with_directory(Path::new("/path/to/stow").to_path_buf())
     ///     .stow()
     ///     .build();
@@ -474,7 +487,7 @@ impl<T: CommandOperation<DirectoryReader> + Default> RestowCommandBuilder<T> {
     ///
     /// let command = CommandBuilder::<CommandOperationImpl>::new()
     ///     .simulate()
-    ///     .with_target(Path::new("/path/to/target").to_path_buf())
+    ///     .clone_with_target(Path::new("/path/to/target").to_path_buf())
     ///     .with_directory(Path::new("/path/to/stow").to_path_buf())
     ///     .restow()
     ///     .build();

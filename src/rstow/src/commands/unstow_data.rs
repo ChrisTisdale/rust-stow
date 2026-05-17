@@ -17,15 +17,32 @@
  */
 
 use std::path::PathBuf;
+use tracing::instrument;
 
+#[derive(Debug, Clone)]
 pub struct UnstowData {
     pub(crate) target: PathBuf,
     pub(crate) directory: PathBuf,
+    pub(crate) dot_file_prefix: Option<String>,
 }
 
 impl UnstowData {
     #[must_use]
-    pub const fn new(target: PathBuf, directory: PathBuf) -> Self {
-        Self { target, directory }
+    #[instrument(level = "trace")]
+    pub fn new(target: PathBuf, directory: PathBuf, dot_file_prefix: Option<String>) -> Self {
+        Self {
+            target,
+            directory,
+            dot_file_prefix,
+        }
+    }
+
+    #[must_use]
+    pub fn clone_with_target(&self, target: PathBuf) -> Self {
+        Self {
+            target,
+            directory: self.directory.clone(),
+            dot_file_prefix: self.dot_file_prefix.clone(),
+        }
     }
 }
