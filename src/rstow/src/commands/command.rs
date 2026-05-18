@@ -615,11 +615,7 @@ mod tests {
         let mut ignored = HashSet::new();
         ignored.insert("ignored-file.txt".to_string());
 
-        let command = setup
-            .default_builder()
-            .stow()
-            .with_ignored(ignored)
-            .build();
+        let command = setup.default_builder().stow().with_ignored(ignored).build();
         assert!(command.is_ok());
 
         let result = command.unwrap().execute();
@@ -674,11 +670,7 @@ mod tests {
         let setup = setup.unwrap();
         // In no-folding mode, dir1 should be created and file1.txt linked inside it
 
-        let command = setup
-            .default_builder()
-            .stow()
-            .with_no_folding(true)
-            .build();
+        let command = setup.default_builder().stow().with_no_folding(true).build();
         assert!(command.is_ok());
 
         let result = command.unwrap().execute();
@@ -724,10 +716,7 @@ mod tests {
         assert!(link_target.ends_with("file.txt"));
         let content = fs::read_to_string(&target_file);
         assert!(content.is_ok());
-        assert_eq!(
-            content.unwrap(),
-            "original content\n"
-        );
+        assert_eq!(content.unwrap(), "original content\n");
     }
 
     #[test]
@@ -957,12 +946,11 @@ mod tests {
         let setup = setup.unwrap();
 
         let target_file = setup.setup_path.join("file.txt");
-        let command_provider =
-            || -> Command<DirectoryReader, CommandOperationImpl> {
-                let command = setup.default_builder().restow().build();
-                assert!(command.is_ok());
-                command.unwrap()
-            };
+        let command_provider = || -> Command<DirectoryReader, CommandOperationImpl> {
+            let command = setup.default_builder().restow().build();
+            assert!(command.is_ok());
+            command.unwrap()
+        };
 
         // Initial stow via restow
         let command = command_provider();
@@ -987,10 +975,7 @@ mod tests {
         let setup = setup.unwrap();
 
         // Stow first
-        let command = setup
-            .default_builder()
-            .stow()
-            .build();
+        let command = setup.default_builder().stow().build();
         assert!(command.is_ok());
         let result = command.unwrap().execute();
         assert!(result.is_ok());
@@ -1000,10 +985,7 @@ mod tests {
         assert!(setup.setup_path.join("linked-directory").exists());
 
         // Unstow
-        let command = setup
-            .default_builder()
-            .unstow()
-            .build();
+        let command = setup.default_builder().unstow().build();
         assert!(command.is_ok());
         let result = command.unwrap().execute();
         assert!(result.is_ok());
@@ -1020,11 +1002,7 @@ mod tests {
         let setup = setup.unwrap();
 
         // Stow first with folding disabled
-        let command = setup
-            .default_builder()
-            .stow()
-            .with_no_folding(true)
-            .build();
+        let command = setup.default_builder().stow().with_no_folding(true).build();
         assert!(command.is_ok());
         let result = command.unwrap().execute();
         assert!(result.is_ok());
@@ -1038,10 +1016,7 @@ mod tests {
         assert!(target_file.is_symlink());
 
         // Unstow
-        let command = setup
-            .default_builder()
-            .unstow()
-            .build();
+        let command = setup.default_builder().unstow().build();
         assert!(command.is_ok());
         let result = command.unwrap().execute();
         assert!(result.is_ok());
@@ -1097,11 +1072,7 @@ mod tests {
         let setup = setup.unwrap();
 
         // Stow first with folding disabled
-        let command = setup
-            .default_builder()
-            .stow()
-            .with_no_folding(true)
-            .build();
+        let command = setup.default_builder().stow().with_no_folding(true).build();
         assert!(command.is_ok());
         let result = command.unwrap().execute();
         assert!(result.is_ok());
@@ -1118,10 +1089,7 @@ mod tests {
         assert!(target_file2.is_symlink());
 
         // Unstow
-        let command = setup
-            .default_builder()
-            .unstow()
-            .build();
+        let command = setup.default_builder().unstow().build();
         assert!(command.is_ok());
         let result = command.unwrap().execute();
         assert!(result.is_ok());
